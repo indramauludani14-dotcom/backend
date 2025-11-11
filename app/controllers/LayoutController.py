@@ -26,7 +26,19 @@ class LayoutController:
         Body: {items: [], room_type: "", floor_data: {}}
         """
         try:
-            from app.services.LayoutService import LayoutService
+            # Check if ML dependencies are available
+            try:
+                from app.services.LayoutService import LayoutService
+            except ImportError as import_error:
+                return jsonify({
+                    "status": "error",
+                    "message": "ML prediction tidak tersedia di environment ini. Paket ML (numpy, pandas, scikit-learn) tidak terinstall.",
+                    "suggestion": "Gunakan endpoint /api/layout/auto-place untuk simple layout atau deploy ML service terpisah.",
+                    "available_endpoints": [
+                        "/api/layout/recommendations",
+                        "/api/layout/auto-place (SimpleLayoutService - tanpa ML)"
+                    ]
+                }), 503
             
             data = request.get_json()
             items = data.get("items", [])
@@ -124,8 +136,22 @@ class LayoutController:
         Body: {room_width: 17.0, room_height: 11.0, use_ai: true, max_items: 5}
         """
         try:
-            from app.services.AutoLayoutService import AutoLayoutService
-            from app.services.SimpleLayoutService import SimpleLayoutService
+            # AutoLayoutService only needs numpy (not full ML stack)
+            try:
+                from app.services.AutoLayoutService import AutoLayoutService
+            except ImportError:
+                # Fallback to SimpleLayoutService (no ML dependencies)
+                from app.services.SimpleLayoutService import SimpleLayoutService
+                
+                data = request.get_json() or {}
+                room_width = data.get("room_width", 17.0)
+                room_height = data.get("room_height", 11.0)
+                
+                result = SimpleLayoutService.auto_place_all_furniture(room_width, room_height)
+                result["algorithm"] = "SimpleLayoutService (No ML - Fallback)"
+                result["model_used"] = False
+                
+                return jsonify(result)
             
             data = request.get_json() or {}
             room_width = data.get("room_width", 17.0)
@@ -133,7 +159,7 @@ class LayoutController:
             use_ai = data.get("use_ai", False)  # Default: use Simple (deterministic)
             max_items = data.get("max_items", 5)  # Max items limit from frontend
             
-            print(f"\n� Auto Place Request - Limited Mode")
+            print(f"\n🔧 Auto Place Request - Limited Mode")
             print(f"   Room: {room_width}m × {room_height}m")
             print(f"   Max Items: {max_items}")
             print(f"   Use AI: {use_ai}")
