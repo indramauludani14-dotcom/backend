@@ -14,6 +14,3 @@ python-dotenv==1.0.0
 # Numeric computation (untuk auto-place furniture)
 numpy==2.0.2
 
-# WSGI Server (untuk Railway, Render, Heroku)
-gunicorn==21.2.0
-
