@@ -1,0 +1,185 @@
+/* =============================================
+   MAIN APP LAYOUT - app.css
+   ============================================= */
+
+/* ========== NAVBAR ========== */
+.navbar {
+  position: fixed;
+  top: 0;
+  width: 100%;
+  background: rgba(10, 10, 10, 0.85);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+  z-index: 1000;
+  padding: 1rem 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.navbar-logo {
+  font-weight: 700;
+  color: var(--accent);
+  font-size: 1.4rem;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.navbar-links {
+  display: flex;
+  gap: 2rem;
+}
+
+.navbar-links a {
+  color: var(--text-muted);
+  text-decoration: none;
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+
+.navbar-links a:hover,
+.navbar-links a.active {
+  color: var(--accent);
+}
+
+/* ========== MAIN CONTAINER ========== */
+.app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.app-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.main-content {
+  flex: 1;
+  padding: 6rem 2rem 3rem;
+}
+
+.app-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ========== FOOTER ========== */
+.app-footer {
+  text-align: center;
+  padding: 1.25rem 1rem;
+  font-size: 0.85rem;
+  color: #ffffff;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  background: #000000;
+  backdrop-filter: blur(10px);
+  margin-top: auto;
+  letter-spacing: 0.3px;
+}
+
+.app-footer p {
+  margin: 0;
+  font-weight: 400;
+  color: #ffffff;
+  opacity: 0.9;
+}
+
+footer {
+  text-align: center;
+  padding: 2rem 1rem;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
+  background: var(--bg-card);
+}
+
+/* ========== UNITY PLAYER ========== */
+.unity-container {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.unity-canvas {
+  width: 100%;
+  height: 640px;
+  background: #000;
+  border-radius: 10px;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* ========== MOBILE CONTROL BUTTON ========== */
+.btn-mobile-control {
+  padding: 1rem;
+  font-size: 1.5rem;
+  background: #1976d2;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  user-select: none;
+  box-shadow: 0 2px 8px rgba(25, 118, 210, 0.3);
+  transition: all 0.2s ease;
+}
+
+.btn-mobile-control:hover {
+  background: #1565c0;
+}
+
+.btn-mobile-control:active {
+  transform: scale(0.95);
+  background: #0d47a1;
+}
+
+/* iOS Fix */
+@supports (-webkit-touch-callout: none) {
+  .unity-canvas,
+  .btn-mobile-control {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/* ========== RESPONSIVE ========== */
+@media (max-width: 768px) {
+  .navbar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.8rem;
+    padding: 1rem;
+  }
+
+  .navbar-links {
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .main-content {
+    padding: 5rem 1.2rem 2rem;
+  }
+
+  .unity-canvas {
+    height: 400px;
+  }
+
+  .btn-mobile-control {
+    padding: 0.8rem;
+    font-size: 1.2rem;
+  }
+
+  .app-footer {
+    font-size: 0.8rem;
+    padding: 1rem 0.75rem;
+  }
+}
+
+@media (max-width: 768px) and (orientation: landscape) {
+  .unity-canvas {
+    height: 60vh;
+  }
+}
