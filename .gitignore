@@ -44,5 +44,11 @@ model_auto_layout.pkl
 feature_columns.pkl
 model_metadata.pkl
 
+# Folders to ignore
+frontend/
+backend_final/
+backend/
+
 # Logs
 *.log
+.vercel

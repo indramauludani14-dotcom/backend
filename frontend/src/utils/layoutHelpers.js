@@ -3,13 +3,18 @@
  * Auto-fix overlap, validation, and layout management
  */
 
-// Frontend Layout Configuration
+// Frontend Layout Configuration - LIMITED FURNITURE MODE
 export const LAYOUT_CONFIG = {
-  MAX_ITEMS: 50,           // Maximum items to place
+  MAX_ITEMS: 5,            // Maximum 4-5 items to place (matching backend)
   MIN_SPACING_PX: 40,      // 80cm = 40px minimum spacing
   AUTO_FIX_OVERLAP: true,  // Auto-fix overlapping items
   MAX_RETRY: 3,            // Maximum retry attempts if collision detected
-  COLLISION_TOLERANCE: 5   // Max overlaps allowed before retry
+  COLLISION_TOLERANCE: 0,  // Zero overlaps allowed (strict mode)
+  MAX_FURNITURE_SIZE_M: 3.0,  // Maximum furniture size 3 meters
+  MIN_FURNITURE_SIZE_M: 0.3,  // Minimum furniture size 30cm
+  MAX_COVERAGE_RATIO: 0.30,   // Maximum 30% floor coverage
+  WARNING_ITEM_COLOR: '#FFFFFF',  // White color for problematic items
+  WARNING_ITEM_STROKE: '#FF6B6B', // Red stroke for warnings
 };
 
 /**
@@ -219,7 +224,7 @@ export const processAndFixPlacedItems = (backendItems, scaleFactor = 50, canvasW
 };
 
 /**
- * Generate validation report message
+ * Generate validation report message with LIMITED MODE details
  * @param {Object} validation - Frontend validation results
  * @param {Object} backendValidation - Backend validation results
  * @param {number} retryCount - Number of auto-fix attempts
@@ -230,18 +235,25 @@ export const generateValidationMessage = (validation, backendValidation, retryCo
   const hasOverlap = validation.collisionCount > 0 || (backendValidation.overlap_count || 0) > 0;
   const algorithmUsed = res.model_used ? 'AI Random Forest' : 'Simple Algorithm';
   const algorithmEmoji = res.model_used ? '🤖' : '🔧';
+  const maxItems = res.max_items || LAYOUT_CONFIG.MAX_ITEMS;
+  const floorCoverage = res.floor_coverage || 0;
+  const maxCoverage = res.max_coverage || LAYOUT_CONFIG.MAX_COVERAGE_RATIO * 100;
   
   const lines = [
-    `${algorithmEmoji} Auto Layout Complete!`,
+    `${algorithmEmoji} Auto Layout Complete! (LIMITED MODE)`,
+    ``,
+    `⚡ BATASAN FURNITURE:`,
+    `   Max Items: ${maxItems} furniture (4-5 items)`,
+    `   Max Size: ${LAYOUT_CONFIG.MAX_FURNITURE_SIZE_M}m per dimensi`,
+    `   Max Coverage: ${maxCoverage}% dari luas lantai`,
     ``,
     `✅ Algorithm: ${res.algorithm || algorithmUsed}`,
     `📐 Room: 16m × 10m (160m²)`,
-    `📦 Max Items Limit: ${LAYOUT_CONFIG.MAX_ITEMS}`,
     ``,
     `📊 Results:`,
-    `   Total Attempted: ${res.total_items} items`,
     `   Successfully Placed: ${res.placed_count} items`,
-    `   Success Rate: ${res.success_rate}%`,
+    `   Floor Coverage: ${floorCoverage.toFixed(1)}% (Max: ${maxCoverage}%)`,
+    `   Failed/Rejected: ${res.failed_count || 0} items`,
     ``,
     `🔍 FRONTEND VALIDATION:`,
     validation.collisionCount === 0
@@ -261,28 +273,28 @@ export const generateValidationMessage = (validation, backendValidation, retryCo
     `   ✅ Dalam batas ruangan`,
     `   ✅ Hindari tangga & obstacle`,
     ``,
-    `🪑 Furniture Placed:`,
-    `   Living: SOFA, AC`,
-    `   Dining: Meja, Kursi, Lemari`,
-    `   Outdoor: Furniture Teras`,
-    `   Decoration: Lukisan, Display, Plants`,
+    `💡 ITEM BERWARNA PUTIH = PERLU ADJUSTMENT`,
+    `   Items dengan background PUTIH menunjukkan:`,
+    `   - Tumpang tindih dengan item lain, atau`,
+    `   - Spacing terlalu dekat (< 80cm)`,
+    `   Klik item putih untuk adjust posisi/ukuran secara manual`,
     ``,
     hasOverlap 
-      ? `⚠️ WARNING: Masih ada ${validation.collisionCount} furniture yang tumpang tindih!`
-      : `💡 ${res.placed_count} dari ${res.total_items} furniture berhasil ditempatkan`,
+      ? `⚠️ WARNING: ${validation.collisionCount} furniture yang tumpang tindih!`
+      : `✅ ${res.placed_count} furniture ditempatkan dengan aman`,
     hasOverlap 
-      ? `   Silakan adjust posisi secara manual.`
-      : `   dengan spacing aman (80cm) dan tidak tumpang tindih!`
+      ? `   Silakan adjust item berwarna PUTIH secara manual.`
+      : `   Layout optimal dengan spacing 80cm dan tanpa overlap!`
   ];
   
   if (validation.collisions.length > 0) {
     lines.push('');
-    lines.push(`⚠️ Overlapping items:`);
-    validation.collisions.slice(0, 3).forEach(c => {
+    lines.push(`⚠️ Items yang OVERLAP (Berwarna PUTIH):`);
+    validation.collisions.slice(0, 5).forEach(c => {
       lines.push(`   - ${c.item1} vs ${c.item2}`);
     });
-    if (validation.collisions.length > 3) {
-      lines.push(`   ... and ${validation.collisions.length - 3} more`);
+    if (validation.collisions.length > 5) {
+      lines.push(`   ... dan ${validation.collisions.length - 5} lainnya`);
     }
   }
   

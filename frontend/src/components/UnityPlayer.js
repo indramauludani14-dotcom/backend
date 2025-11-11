@@ -1,5 +1,6 @@
 // src/components/UnityPlayer.js
 import React, { useEffect, useRef, useState } from 'react';
+import { NotificationManager } from './Notification';
 
 /**
  * UnityPlayer component
@@ -25,12 +26,12 @@ function UnityPlayer() {
   const unityInstanceRef = useRef(null);
   const [isQuitting, setIsQuitting] = useState(false);
 
-  // Nama file yang user punya — disesuaikan. Kita encode supaya spasi aman.
+  // Unity Build files - VIRTUALIGN (extracted) dari public/UnityBuild/Build/
   const buildFolder = `${process.env.PUBLIC_URL || ''}/UnityBuild/Build`;
-  const loaderFile = `${buildFolder}/${encodeURIComponent('Virtual Tour.loader.js')}`;
-  const dataFile = `${buildFolder}/${encodeURIComponent('Virtual Tour.data')}`;
-  const frameworkFile = `${buildFolder}/${encodeURIComponent('Virtual Tour.framework.js')}`;
-  const codeFile = `${buildFolder}/${encodeURIComponent('Virtual Tour.wasm')}`;
+  const loaderFile = `${buildFolder}/VIRTUALIGN.loader.js`;
+  const dataFile = `${buildFolder}/VIRTUALIGN.data`;
+  const frameworkFile = `${buildFolder}/VIRTUALIGN.framework.js`;
+  const codeFile = `${buildFolder}/VIRTUALIGN.wasm`;
 
   // Start Unity dan load loader script
   const startUnity = () => {
@@ -59,7 +60,10 @@ function UnityPlayer() {
     script.onerror = (err) => {
       console.error('Failed to load Unity loader script:', err);
       setLoadingError('Gagal memuat file Unity loader. Periksa apakah file ada di /public/UnityBuild/Build/');
-      alert('Failed to load Unity files. Please check the files are in /public/UnityBuild/Build/');
+      NotificationManager.error(
+        '❌ Gagal Memuat Unity',
+        'File Unity tidak ditemukan. Pastikan file ada di /public/UnityBuild/Build/'
+      );
       setStarted(false);
     };
 
@@ -107,7 +111,10 @@ function UnityPlayer() {
     } catch (err) {
       console.error('createUnityInstance failed:', err);
       setLoadingError(String(err));
-      alert('Failed to initialize Unity instance: ' + err);
+      NotificationManager.error(
+        '❌ Gagal Inisialisasi Unity',
+        'Unity instance gagal dimuat: ' + err
+      );
       setStarted(false);
     }
   };

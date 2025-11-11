@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { cmsApi } from '../services/cmsApi';
 import '../styles/QnA.css';
+import { NotificationManager } from '../components/Notification';
 
 function QnA() {
   const [questions, setQuestions] = useState([]);
@@ -22,52 +24,43 @@ function QnA() {
   }, []);
 
   const fetchQuestions = async () => {
-    try {
-      setLoading(true);
-      const response = await fetch('http://localhost:5000/api/questions/answered');
-      const data = await response.json();
-      
-      if (data.status === 'success') {
-        setQuestions(data.data || []);
-      }
-    } catch (error) {
-      console.error('Error fetching questions:', error);
-    } finally {
-      setLoading(false);
+    setLoading(true);
+    const res = await cmsApi.getAnsweredQuestions();
+    if (res.status === 'success') {
+      setQuestions(res.data || []);
     }
+    setLoading(false);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     
     if (!formData.name || !formData.email || !formData.question) {
-      alert('Please fill in all fields');
+      NotificationManager.warning(
+        '⚠️ Form Tidak Lengkap',
+        'Mohon isi semua field yang diperlukan'
+      );
       return;
     }
 
-    try {
-      setSubmitting(true);
-      const response = await fetch('http://localhost:5000/api/questions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
-      });
-      
-      const data = await response.json();
-      
-      if (data.status === 'success') {
-        alert(data.message);
-        setFormData({ name: '', email: '', question: '' });
-        setShowForm(false);
-      } else {
-        alert(data.message);
-      }
-    } catch (error) {
-      console.error('Error submitting question:', error);
-      alert('Failed to submit question. Please try again.');
-    } finally {
-      setSubmitting(false);
+    setSubmitting(true);
+    const res = await cmsApi.submitQuestion(formData);
+    
+    if (res.status === 'success') {
+      NotificationManager.success(
+        '✅ Pertanyaan Terkirim!',
+        res.message || 'Pertanyaan Anda akan dijawab oleh admin.',
+        6000
+      );
+      setFormData({ name: '', email: '', question: '' });
+      setShowForm(false);
+    } else {
+      NotificationManager.error(
+        '❌ Gagal Mengirim',
+        res.message || 'Terjadi kesalahan'
+      );
     }
+    setSubmitting(false);
   };
 
   const handleInputChange = (e) => {

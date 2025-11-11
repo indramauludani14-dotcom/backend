@@ -787,6 +787,56 @@ mkdir -p static/uploads/news
    curl http://localhost:5000/api/your-route
    ```
 
+---
+
+## 🧪 Load Testing with K6
+
+Project ini dilengkapi dengan **K6 Load Testing Suite** - modern load testing tool untuk performance testing.
+
+### Quick Start
+
+```powershell
+# 1. Install K6
+winget install k6
+
+# 2. Start backend
+python app.py
+
+# 3. Run quick test
+.\quick-start-k6.bat
+```
+
+### Test Types Available
+
+| Test | Duration | Purpose | Command |
+|------|----------|---------|---------|
+| **Smoke** | 30s | Quick check | `k6 run k6-tests/smoke-test.js` |
+| **Load** | 4min | Normal load | `k6 run k6-tests/api-load-test.js` |
+| **Stress** | 14min | Find limits | `k6 run k6-tests/stress-test.js` |
+| **Spike** | 4min | Traffic surge | `k6 run k6-tests/spike-test.js` |
+| **Soak** | 30min+ | Memory leaks | `k6 run k6-tests/soak-test.js` |
+| **Browser** | 2min | Frontend | `k6 run k6-tests/browser-test.js` |
+
+### Documentation
+
+- **Quick Start:** [K6_README.md](K6_README.md)
+- **Complete Guide:** [K6_TESTING_GUIDE.md](K6_TESTING_GUIDE.md)
+- **Setup Summary:** [K6_SETUP_COMPLETE.md](K6_SETUP_COMPLETE.md)
+- **Quick Reference:** [K6_QUICK_REFERENCE.md](K6_QUICK_REFERENCE.md)
+
+### Example Results
+
+**Good Performance:**
+```
+✓ checks................: 100.00% ✓ 300  ✗ 0
+✓ http_req_duration.....: avg=1.2s   p(95)=2.4s
+✓ http_req_failed.......: 0.00%
+```
+
+**For more details, see [K6_README.md](K6_README.md)**
+
+---
+
 ### Adding New Model
 
 1. **Create Model Class**

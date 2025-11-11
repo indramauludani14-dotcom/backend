@@ -16,6 +16,40 @@ class BaseModel:
         return Database.get_connection(Config.DB_NAME)
     
     @classmethod
+    def execute(cls, query, params=None):
+        """Execute query and return last insert id"""
+        conn = cls.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(query, params or ())
+        last_id = cursor.lastrowid
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return last_id
+    
+    @classmethod
+    def fetch_all(cls, query, params=None):
+        """Fetch all results"""
+        conn = cls.get_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(query, params or ())
+        results = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return results
+    
+    @classmethod
+    def fetch_one(cls, query, params=None):
+        """Fetch single result"""
+        conn = cls.get_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(query, params or ())
+        result = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        return result
+    
+    @classmethod
     def find_all(cls):
         """Get all records"""
         conn = cls.get_connection()

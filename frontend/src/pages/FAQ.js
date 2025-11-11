@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useContext } from 'react';
-import { CMSContext } from '../contexts/CMSContext';
+import React, { useState, useEffect } from 'react';
+import { cmsApi } from '../services/cmsApi';
 import '../styles/FAQ.css';
 
 function FAQ() {
-  const { content } = useContext(CMSContext);
   const [openIndex, setOpenIndex] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [faqData, setFaqData] = useState({
     title: "Frequently Asked Questions",
     subtitle: "Temukan jawaban atas pertanyaan yang sering diajukan",
@@ -12,14 +13,59 @@ function FAQ() {
   });
 
   useEffect(() => {
-    if (content && content.faq) {
-      setFaqData(content.faq);
-    }
-  }, [content]);
+    const fetchFAQs = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const res = await cmsApi.getFAQs();
+        
+        if (res.status === "success") {
+          setFaqData(prev => ({
+            ...prev,
+            questions: res.faqs || []
+          }));
+        } else {
+          setError(res.message || "Gagal memuat FAQ");
+        }
+      } catch (err) {
+        setError("Terjadi kesalahan saat memuat FAQ");
+        console.error("Error fetching FAQs:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchFAQs();
+  }, []);
 
   const toggleFAQ = (index) => {
     setOpenIndex(openIndex === index ? null : index);
   };
+
+  if (loading) {
+    return (
+      <div className="faq-page">
+        <div className="faq-loading">
+          <div className="spinner"></div>
+          <p>Memuat FAQ...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="faq-page">
+        <div className="faq-error">
+          <h3>Terjadi Kesalahan</h3>
+          <p>{error}</p>
+          <button onClick={() => window.location.reload()} className="retry-btn">
+            Muat Ulang
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="faq-page">

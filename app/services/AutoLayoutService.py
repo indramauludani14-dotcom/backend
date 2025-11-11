@@ -9,21 +9,19 @@ import json
 class AutoLayoutService:
     """Service for automatic furniture placement with optimal positioning"""
     
-    # Furniture database - OPTIMIZED: 96.3% SUCCESS RATE
+    # LAYOUT CONSTRAINTS - LIMITED FURNITURE
+    MAX_FURNITURE_ITEMS = 5  # Maximum 4-5 furniture pieces per layout
+    MAX_FURNITURE_SIZE = 7.5  # Maximum size (panjang or lebar) 7.5 meters (750cm = 750px on 800px canvas)
+    MIN_FURNITURE_SIZE = 0.3  # Minimum size 30cm
+    MAX_TOTAL_AREA_RATIO = 0.30  # Max 30% of floor area can be occupied
+    
+    # Furniture database - LIMITED & SIZED: MAX 4-5 ITEMS
     FURNITURE_CATALOG = {
-        "SOFA 3 Seat": {"panjang": 2.6, "lebar": 1.0, "quantity": 2, "zone": "living", "priority": 1},
-        "SOFA 1 Seat Besar": {"panjang": 1.15, "lebar": 1.0, "quantity": 2, "zone": "living", "priority": 2},
-        "SOFA 1 Seat Kecil": {"panjang": 0.94, "lebar": 0.8, "quantity": 2, "zone": "living", "priority": 3},
-        "Meja Lingkaran Kecil": {"panjang": 0.5, "lebar": 0.5, "quantity": 2, "zone": "living", "priority": 5},
-        "Pas Bunga Small": {"panjang": 0.36, "lebar": 0.36, "quantity": 3, "zone": "decoration", "priority": 9},
-        "Pas Bunga Medium": {"panjang": 0.43, "lebar": 0.43, "quantity": 2, "zone": "decoration", "priority": 9},
-        "Pas Bunga Large": {"panjang": 0.6, "lebar": 0.6, "quantity": 1, "zone": "decoration", "priority": 9},
-        "Stand Lukisan": {"panjang": 0.82, "lebar": 0.72, "quantity": 2, "zone": "decoration", "priority": 8},
-        "Lukisan Kecil": {"panjang": 0.6, "lebar": 0.8, "quantity": 2, "zone": "decoration", "priority": 10},
-        "Lukisan Besar": {"panjang": 4.25, "lebar": 1.8, "quantity": 1, "zone": "decoration", "priority": 7},
+        "SOFA 3 Seat": {"panjang": 2.6, "lebar": 1.0, "quantity": 1, "zone": "living", "priority": 1},
+        "SOFA 1 Seat Besar": {"panjang": 1.15, "lebar": 1.0, "quantity": 1, "zone": "living", "priority": 2},
+        "Meja Lingkaran Kecil": {"panjang": 0.5, "lebar": 0.5, "quantity": 1, "zone": "living", "priority": 5},
         "Meja Makan": {"panjang": 2.4, "lebar": 1.0, "quantity": 1, "zone": "dining", "priority": 1},
-        "Kursi Makan": {"panjang": 0.46, "lebar": 0.75, "quantity": 6, "zone": "dining", "priority": 2},
-        "Kursi Pantai": {"panjang": 0.8, "lebar": 2.0, "quantity": 1, "zone": "outdoor", "priority": 7}
+        "Kursi Makan": {"panjang": 0.46, "lebar": 0.75, "quantity": 1, "zone": "dining", "priority": 2},
     }
     
     # Layout zones definition dengan obstacle avoidance (koordinat dalam meter)
@@ -290,10 +288,57 @@ class AutoLayoutService:
         }
     
     @staticmethod
+    def validate_furniture_constraints(furniture_name: str, furniture_data: Dict, 
+                                       placed_items: List[Dict],
+                                       room_width: float, room_height: float) -> Dict:
+        """
+        Validate furniture against size and capacity constraints
+        Returns: {valid: bool, reason: str}
+        """
+        panjang = furniture_data["panjang"]
+        lebar = furniture_data["lebar"]
+        
+        # Check maximum items limit
+        if len(placed_items) >= AutoLayoutService.MAX_FURNITURE_ITEMS:
+            return {
+                "valid": False, 
+                "reason": f"Maximum {AutoLayoutService.MAX_FURNITURE_ITEMS} items limit reached"
+            }
+        
+        # Check furniture size constraints
+        if panjang > AutoLayoutService.MAX_FURNITURE_SIZE or lebar > AutoLayoutService.MAX_FURNITURE_SIZE:
+            return {
+                "valid": False,
+                "reason": f"Furniture too large (max {AutoLayoutService.MAX_FURNITURE_SIZE}m per dimension)"
+            }
+        
+        if panjang < AutoLayoutService.MIN_FURNITURE_SIZE or lebar < AutoLayoutService.MIN_FURNITURE_SIZE:
+            return {
+                "valid": False,
+                "reason": f"Furniture too small (min {AutoLayoutService.MIN_FURNITURE_SIZE}m per dimension)"
+            }
+        
+        # Check total area constraint
+        room_area = room_width * room_height
+        current_furniture_area = sum(item["panjang"] * item["lebar"] for item in placed_items)
+        new_furniture_area = panjang * lebar
+        total_area = current_furniture_area + new_furniture_area
+        area_ratio = total_area / room_area
+        
+        if area_ratio > AutoLayoutService.MAX_TOTAL_AREA_RATIO:
+            return {
+                "valid": False,
+                "reason": f"Floor capacity exceeded ({area_ratio*100:.1f}% > {AutoLayoutService.MAX_TOTAL_AREA_RATIO*100}% limit)"
+            }
+        
+        return {"valid": True, "reason": "OK"}
+    
+    @staticmethod
     def auto_place_all_furniture(room_width: float = 17.0, 
                                 room_height: float = 11.0) -> Dict:
         """
         Automatically place all furniture in the catalog
+        LIMITED TO MAX 4-5 ITEMS with size and floor constraints
         Returns optimized layout with high accuracy and retry mechanism
         """
         placed_items = []
@@ -308,11 +353,32 @@ class AutoLayoutService:
         max_retries = 3
         retry_count = 0
         
-        # Place each furniture type
+        print("\n" + "="*60)
+        print("🪑 AUTO LAYOUT - LIMITED FURNITURE MODE")
+        print("="*60)
+        print(f"Max Items: {AutoLayoutService.MAX_FURNITURE_ITEMS}")
+        print(f"Max Size: {AutoLayoutService.MAX_FURNITURE_SIZE}m")
+        print(f"Max Floor Coverage: {AutoLayoutService.MAX_TOTAL_AREA_RATIO*100}%")
+        print("="*60)
+        
+        # Place each furniture type with constraints validation
         for furniture_name, furniture_data in sorted_furniture:
             quantity = furniture_data["quantity"]
             
             for i in range(quantity):
+                # Validate furniture constraints before placement
+                validation = AutoLayoutService.validate_furniture_constraints(
+                    furniture_name, furniture_data, placed_items, room_width, room_height
+                )
+                
+                if not validation["valid"]:
+                    failed_items.append({
+                        "nama": furniture_name,
+                        "reason": validation["reason"]
+                    })
+                    print(f"❌ {furniture_name}: {validation['reason']}")
+                    continue
+                
                 result = None
                 attempts = 0
                 max_attempts = 15  # Maximum attempts untuk 99% success
@@ -348,24 +414,42 @@ class AutoLayoutService:
                     # Add unique ID
                     result["uid"] = len(placed_items) + 1
                     placed_items.append(result)
+                    print(f"✅ {furniture_name} placed at ({result['x']:.2f}, {result['y']:.2f})")
+                    
+                    # Stop if max items reached
+                    if len(placed_items) >= AutoLayoutService.MAX_FURNITURE_ITEMS:
+                        print(f"⚠️ Maximum {AutoLayoutService.MAX_FURNITURE_ITEMS} items limit reached!")
+                        break
                 else:
                     failed_items.append({
                         "nama": furniture_name,
                         "reason": f"No valid position found after {max_attempts} attempts"
                     })
+            
+            # Break outer loop if max items reached
+            if len(placed_items) >= AutoLayoutService.MAX_FURNITURE_ITEMS:
+                break
         
         # Calculate statistics
         total_items = sum(f["quantity"] for f in AutoLayoutService.FURNITURE_CATALOG.values())
+        total_items = min(total_items, AutoLayoutService.MAX_FURNITURE_ITEMS)  # Cap at max items
         success_rate = (len(placed_items) / total_items) * 100 if total_items > 0 else 0
+        
+        # Calculate floor coverage
+        room_area = room_width * room_height
+        furniture_area = sum(item["panjang"] * item["lebar"] for item in placed_items)
+        coverage_ratio = (furniture_area / room_area) * 100
         
         # VALIDATION: Check for overlaps
         validation = AutoLayoutService.validate_no_overlap(placed_items)
         
         print("\n" + "="*60)
-        print("📊 AUTO LAYOUT VALIDATION REPORT")
+        print("📊 AUTO LAYOUT VALIDATION REPORT (LIMITED MODE)")
         print("="*60)
-        print(f"Total Items Placed: {len(placed_items)}/{total_items}")
+        print(f"Max Items Allowed: {AutoLayoutService.MAX_FURNITURE_ITEMS}")
+        print(f"Items Placed: {len(placed_items)}/{AutoLayoutService.MAX_FURNITURE_ITEMS}")
         print(f"Success Rate: {success_rate:.1f}%")
+        print(f"Floor Coverage: {coverage_ratio:.1f}% (Max: {AutoLayoutService.MAX_TOTAL_AREA_RATIO*100}%)")
         print(f"Overlap Status: {validation['status']}")
         print(f"  - Overlaps: {validation['overlap_count']}")
         print(f"  - Close Spacing Warnings: {validation['warning_count']}")
@@ -380,7 +464,7 @@ class AutoLayoutService:
         if failed_items:
             print(f"\n❌ FAILED TO PLACE ({len(failed_items)} items):")
             for f in failed_items[:5]:  # Show first 5
-                print(f"  - {f['nama']}")
+                print(f"  - {f['nama']}: {f['reason']}")
         
         print("="*60 + "\n")
         
@@ -389,14 +473,22 @@ class AutoLayoutService:
             "placed_count": len(placed_items),
             "failed_count": len(failed_items),
             "total_items": total_items,
+            "max_items": AutoLayoutService.MAX_FURNITURE_ITEMS,
             "success_rate": round(success_rate, 2),
+            "floor_coverage": round(coverage_ratio, 2),
+            "max_coverage": AutoLayoutService.MAX_TOTAL_AREA_RATIO * 100,
             "placed_items": placed_items,
             "failed_items": failed_items,
             "room_dimensions": {
                 "width": room_width,
                 "height": room_height
             },
-            "validation": validation
+            "validation": validation,
+            "constraints": {
+                "max_items": AutoLayoutService.MAX_FURNITURE_ITEMS,
+                "max_size": AutoLayoutService.MAX_FURNITURE_SIZE,
+                "max_coverage": AutoLayoutService.MAX_TOTAL_AREA_RATIO * 100
+            }
         }
     
     @staticmethod

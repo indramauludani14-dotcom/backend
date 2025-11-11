@@ -1,31 +1,76 @@
-import React, { useState } from 'react';
+import React, { useState, useContext, useEffect } from 'react';
+import { CMSContext } from '../contexts/CMSContext';
+import { cmsApi } from '../services/cmsApi';
 import '../styles/Contact.css';
+import { NotificationManager } from '../components/Notification';
 
 function Contact() {
+  const { content } = useContext(CMSContext);
+  const contactData = content?.contact || {};
+  
   const [formData, setFormData] = useState({
     name: '',
     email: '',
+    phone: '',
     subject: '',
     message: ''
   });
   const [submitting, setSubmitting] = useState(false);
+  const [socialLinks, setSocialLinks] = useState([]);
+
+  // Load social media links from database
+  useEffect(() => {
+    loadSocialMedia();
+  }, []);
+
+  const loadSocialMedia = async () => {
+    try {
+      const response = await cmsApi.getActiveSocialMedia();
+      if (response.status === 'success') {
+        setSocialLinks(response.data || []);
+      }
+    } catch (error) {
+      console.error('Error loading social media:', error);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     
     if (!formData.name || !formData.email || !formData.message) {
-      alert('Please fill in all required fields');
+      NotificationManager.warning(
+        '⚠️ Form Tidak Lengkap',
+        'Mohon isi semua field yang wajib diisi (Name, Email, Message)'
+      );
       return;
     }
 
     setSubmitting(true);
     
-    // Simulate API call (you can implement email sending in backend later)
-    setTimeout(() => {
-      alert('Thank you! Your message has been sent successfully. We will get back to you soon.');
-      setFormData({ name: '', email: '', subject: '', message: '' });
+    try {
+      const response = await cmsApi.submitContact(formData);
+      
+      if (response.status === 'success') {
+        NotificationManager.success(
+          '✅ Pesan Terkirim!',
+          'Terima kasih! Pesan Anda telah berhasil dikirim.\nKami akan menghubungi Anda segera.',
+          6000
+        );
+        setFormData({ name: '', email: '', phone: '', subject: '', message: '' });
+      } else {
+        NotificationManager.error(
+          '❌ Gagal Mengirim',
+          response.message || 'Terjadi kesalahan saat mengirim pesan'
+        );
+      }
+    } catch (error) {
+      NotificationManager.error(
+        '❌ Error',
+        'Terjadi kesalahan. Silakan coba lagi.'
+      );
+    } finally {
       setSubmitting(false);
-    }, 1500);
+    }
   };
 
   const handleInputChange = (e) => {
@@ -40,9 +85,9 @@ function Contact() {
       {/* Hero Section */}
       <div className="contact-hero">
         <div className="hero-content">
-          <span className="contact-label">Hubungi Kami</span>
-          <h1>Contact Us</h1>
-          <p>Hubungi kami untuk pertanyaan, saran, atau konsultasi project Anda</p>
+          <span className="contact-label">{contactData.hero?.label || 'Hubungi Kami'}</span>
+          <h1>{contactData.hero?.title || 'Contact Us'}</h1>
+          <p>{contactData.hero?.subtitle || 'Hubungi kami untuk pertanyaan, saran, atau konsultasi project Anda'}</p>
         </div>
       </div>
 
@@ -51,76 +96,83 @@ function Contact() {
           {/* Contact Information */}
           <div className="contact-info">
             <div className="info-card">
-              <h2>Get In Touch</h2>
-              <p>Kami siap membantu Anda mewujudkan interior impian. Jangan ragu untuk menghubungi kami!</p>
+              <h2>{contactData.info?.title || 'Get In Touch'}</h2>
+              <p>{contactData.info?.description || 'Kami siap membantu Anda mewujudkan interior impian. Jangan ragu untuk menghubungi kami!'}</p>
             </div>
 
             <div className="info-item">
-              <h3>Address</h3>
+              <h3>{contactData.address?.title || 'Address'}</h3>
               <div className="info-content">
-                <p>Jl. Example Street No. 123<br />Jakarta, Indonesia 12345</p>
+                <p style={{ whiteSpace: 'pre-line' }}>{contactData.address?.content || 'Jl. Example Street No. 123\nJakarta, Indonesia 12345'}</p>
               </div>
             </div>
 
             <div className="info-item">
-              <h3>Email</h3>
+              <h3>{contactData.email?.title || 'Email'}</h3>
               <div className="info-content">
                 <p>
-                  <a href="mailto:info@virtualign.com">info@virtualign.com</a><br />
-                  <a href="mailto:support@virtualign.com">support@virtualign.com</a>
+                  <a href={`mailto:${contactData.email?.primary || 'info@virtualign.com'}`}>
+                    {contactData.email?.primary || 'info@virtualign.com'}
+                  </a><br />
+                  <a href={`mailto:${contactData.email?.secondary || 'support@virtualign.com'}`}>
+                    {contactData.email?.secondary || 'support@virtualign.com'}
+                  </a>
                 </p>
               </div>
             </div>
 
             <div className="info-item">
-              <h3>Phone</h3>
+              <h3>{contactData.phone?.title || 'Phone'}</h3>
               <div className="info-content">
                 <p>
-                  <a href="tel:+6281234567890">+62 812-3456-7890</a><br />
-                  <a href="tel:+6281234567891">+62 812-3456-7891</a>
+                  <a href={`tel:${contactData.phone?.primary || '+6281234567890'}`}>
+                    {contactData.phone?.primary || '+62 812-3456-7890'}
+                  </a><br />
+                  <a href={`tel:${contactData.phone?.secondary || '+6281234567891'}`}>
+                    {contactData.phone?.secondary || '+62 812-3456-7891'}
+                  </a>
                 </p>
               </div>
             </div>
 
             <div className="info-item">
-              <h3>Working Hours</h3>
+              <h3>{contactData.hours?.title || 'Working Hours'}</h3>
               <div className="info-content">
                 <p>
-                  Senin - Jumat: 09:00 - 18:00<br />
-                  Sabtu: 09:00 - 15:00<br />
-                  Minggu: Tutup
+                  {contactData.hours?.weekday || 'Senin - Jumat: 09:00 - 18:00'}<br />
+                  {contactData.hours?.saturday || 'Sabtu: 09:00 - 15:00'}<br />
+                  {contactData.hours?.sunday || 'Minggu: Tutup'}
                 </p>
               </div>
             </div>
 
-            {/* Social Media */}
-            <div className="social-links">
-              <h3>Follow Us</h3>
-              <div className="social-buttons">
-                <a href="https://facebook.com" target="_blank" rel="noopener noreferrer" className="social-btn">
-                  Facebook
-                </a>
-                <a href="https://instagram.com" target="_blank" rel="noopener noreferrer" className="social-btn">
-                  Instagram
-                </a>
-                <a href="https://twitter.com" target="_blank" rel="noopener noreferrer" className="social-btn">
-                  Twitter
-                </a>
-                <a href="https://linkedin.com" target="_blank" rel="noopener noreferrer" className="social-btn">
-                  LinkedIn
-                </a>
-                <a href="https://youtube.com" target="_blank" rel="noopener noreferrer" className="social-btn">
-                  YouTube
-                </a>
+            {/* Social Media - Dynamic from Database */}
+            {socialLinks.length > 0 && (
+              <div className="social-links">
+                <h3>Follow Us</h3>
+                <div className="social-buttons">
+                  {socialLinks.map((social) => (
+                    <a 
+                      key={social.id}
+                      href={social.url} 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      className="social-btn"
+                      title={social.platform_name}
+                    >
+                      {social.icon && <i className={social.icon}></i>} {social.platform_name}
+                    </a>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           {/* Contact Form */}
           <div className="contact-form-section">
             <div className="form-card">
-              <h2>Send Us a Message</h2>
-              <p className="form-subtitle">Isi form di bawah dan kami akan menghubungi Anda segera</p>
+              <h2>{contactData.form?.title || 'Send Us a Message'}</h2>
+              <p className="form-subtitle">{contactData.form?.subtitle || 'Isi form di bawah dan kami akan menghubungi Anda segera'}</p>
 
               <form onSubmit={handleSubmit}>
                 <div className="form-row">
@@ -149,15 +201,28 @@ function Contact() {
                   </div>
                 </div>
 
-                <div className="form-group">
-                  <label>Subject</label>
-                  <input
-                    type="text"
-                    name="subject"
-                    value={formData.subject}
-                    onChange={handleInputChange}
-                    placeholder="What is this about?"
-                  />
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Phone Number</label>
+                    <input
+                      type="tel"
+                      name="phone"
+                      value={formData.phone}
+                      onChange={handleInputChange}
+                      placeholder="+62 812-3456-7890"
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label>Subject</label>
+                    <input
+                      type="text"
+                      name="subject"
+                      value={formData.subject}
+                      onChange={handleInputChange}
+                      placeholder="What is this about?"
+                    />
+                  </div>
                 </div>
 
                 <div className="form-group">
@@ -191,10 +256,10 @@ function Contact() {
 
             {/* Map placeholder */}
             <div className="map-card">
-              <h3>Our Location</h3>
+              <h3>{contactData.map?.title || 'Our Location'}</h3>
               <div className="map-placeholder">
                 <iframe
-                  src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3966.521260322283!2d106.8195613!3d-6.1944491!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x2e69f5d2e764b12d%3A0x3d2ad6e1e0e9bcc8!2sNational%20Monument!5e0!3m2!1sen!2sid!4v1234567890"
+                  src={contactData.map?.embedUrl || "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3966.521260322283!2d106.8195613!3d-6.1944491!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x2e69f5d2e764b12d%3A0x3d2ad6e1e0e9bcc8!2sNational%20Monument!5e0!3m2!1sen!2sid!4v1234567890"}
                   width="100%"
                   height="300"
                   style={{ border: 0, borderRadius: '12px' }}

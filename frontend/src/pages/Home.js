@@ -295,17 +295,6 @@ const AdvantagesSection = ({ content }) => {
               </motion.div>
             ))}
           </div>
-          
-          <motion.button 
-            className="advantages-cta"
-            initial={{ opacity: 0 }}
-            whileInView={{ opacity: 1 }}
-            transition={{ delay: 0.4 }}
-            viewport={{ once: true }}
-            whileHover={{ scale: 1.05 }}
-          >
-            Pelajari Lebih Lanjut →
-          </motion.button>
         </div>
       </motion.div>
     </section>

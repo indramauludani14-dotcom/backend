@@ -7,7 +7,10 @@
     "@testing-library/jest-dom": "^6.8.0",
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^13.5.0",
+    "axios": "^1.13.2",
     "framer-motion": "^12.23.22",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^3.0.3",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-icons": "^5.5.0",
@@ -19,7 +22,15 @@
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "eject": "react-scripts eject",
+    "cypress:open": "cypress open",
+    "cypress:run": "cypress run",
+    "cypress:run:chrome": "cypress run --browser chrome",
+    "cypress:run:public": "cypress run --spec \"cypress/e2e/0[1-8]*.cy.js\"",
+    "cypress:run:admin": "cypress run --spec \"cypress/e2e/0[9]*.cy.js,cypress/e2e/1[0-3]*.cy.js\"",
+    "cypress:run:api": "cypress run --spec \"cypress/e2e/14-api-endpoints.cy.js\"",
+    "test:e2e": "cypress run",
+    "test:e2e:report": "cypress run --reporter mochawesome"
   },
   "eslintConfig": {
     "extends": [

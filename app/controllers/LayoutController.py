@@ -119,27 +119,31 @@ class LayoutController:
     def auto_place_furniture():
         """
         Automatically place all furniture with optimal positioning
+        LIMITED MODE: Max 4-5 items with size and floor constraints
         POST /api/layout/auto-place
-        Body: {room_width: 17.0, room_height: 11.0}
+        Body: {room_width: 17.0, room_height: 11.0, use_ai: true, max_items: 5}
         """
         try:
-            from app.services.AILayoutService import AILayoutService
+            from app.services.AutoLayoutService import AutoLayoutService
             from app.services.SimpleLayoutService import SimpleLayoutService
             
             data = request.get_json() or {}
             room_width = data.get("room_width", 17.0)
             room_height = data.get("room_height", 11.0)
-            use_ai = data.get("use_ai", True)  # Default: use AI model
+            use_ai = data.get("use_ai", False)  # Default: use Simple (deterministic)
+            max_items = data.get("max_items", 5)  # Max items limit from frontend
             
-            # Try AI model first, fallback to Simple if model not found
-            if use_ai:
-                print("🤖 Attempting AI-powered layout...")
-                result = AILayoutService.auto_place_all_furniture(room_width, room_height)
-                if not result.get("model_used", False):
-                    print("⚠️ AI model not found, using deterministic algorithm")
-            else:
-                print("🔧 Using deterministic layout algorithm...")
-                result = SimpleLayoutService.auto_place_all_furniture(room_width, room_height)
+            print(f"\n� Auto Place Request - Limited Mode")
+            print(f"   Room: {room_width}m × {room_height}m")
+            print(f"   Max Items: {max_items}")
+            print(f"   Use AI: {use_ai}")
+            
+            # Use AutoLayoutService (has built-in limits)
+            result = AutoLayoutService.auto_place_all_furniture(room_width, room_height)
+            
+            # Add algorithm info
+            result["algorithm"] = "AutoLayoutService (Limited Mode)"
+            result["model_used"] = False
             
             return jsonify(result)
             

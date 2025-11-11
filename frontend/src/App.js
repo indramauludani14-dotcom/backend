@@ -4,6 +4,7 @@ import { CMSProvider } from './contexts/CMSContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 
 import Navbar from './components/Navbar';
+import NotificationContainer from './components/Notification';
 
 // Pages
 import Home from './pages/Home';
@@ -60,6 +61,7 @@ export default function App() {
           <div className="app">
             <Navbar />
             <MainContent />
+            <NotificationContainer />
             <footer className="app-footer">
               <p>&copy; {new Date().getFullYear()} Virtual Tour App. All rights reserved.</p>
             </footer>

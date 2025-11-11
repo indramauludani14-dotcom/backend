@@ -19,15 +19,24 @@ class Config:
     METADATA_PATH = os.path.join(BASE_DIR, 'model_metadata.pkl')
     
     # Upload settings
-    UPLOAD_FOLDER = os.path.join(BASE_DIR, 'static', 'uploads', 'news')
+    UPLOAD_FOLDER = os.path.join(BASE_DIR, 'static', 'uploads')
+    NEWS_UPLOAD_FOLDER = os.path.join(BASE_DIR, 'static', 'uploads', 'news')
     MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB max file size
     ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'csv', 'xlsx', 'xls'}
     
-    # Database settings
-    DB_HOST = "localhost"
-    DB_USER = "root"
-    DB_PASSWORD = ""  # Kosong sesuai permintaan
-    DB_NAME = "virtualignta"
+    # Database settings - Hosting MySQL (ACTIVE)
+    DB_HOST = "virtualign.my.id"
+    DB_USER = "virtuali_virtualuser"
+    DB_PASSWORD = "indra140603"
+    DB_NAME = "virtuali_virtualign"
+    DB_PORT = 3306
+    
+    # Database settings - Local Development (Laragon) - Backup
+    # DB_HOST = "localhost"
+    # DB_USER = "root"
+    # DB_PASSWORD = ""
+    # DB_NAME = "virtualtour1"
+    # DB_PORT = 3306
     
     # Auth settings
     ADMIN_USERNAME = "admin"

@@ -5,6 +5,10 @@ import {
   processAndFixPlacedItems, 
   generateValidationMessage 
 } from "../utils/layoutHelpers";
+import { NotificationManager } from "../components/Notification";
+import { cmsApi } from "../services/cmsApi";
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 const API_URL = "http://localhost:5000";
 const api = {
@@ -326,9 +330,9 @@ const drawRectWithCut = (ctx, x, y, w, h, cutCorner = null, cutSize = 20) => {
   ctx.rect(x, y, w, h);
 };
 
-// Enhanced furniture drawing with shadows, labels, zone indicators, and optional corner cut
+// Enhanced furniture drawing with WHITE BACKGROUND for warning items
 const drawFurniture = (ctx, furniture, selected = false) => {
-  const { x, y, panjang, lebar, nama, color, zone, cornerCut, cutSize } = furniture;
+  const { x, y, panjang, lebar, nama, color, zone, cornerCut, cutSize, hasWarning, warningType } = furniture;
   
   // Validate coordinates to prevent NaN/Infinity errors
   if (!isFinite(x) || !isFinite(y) || !isFinite(panjang) || !isFinite(lebar)) {
@@ -343,33 +347,55 @@ const drawFurniture = (ctx, furniture, selected = false) => {
   const safeLebar = Math.max(10, lebar);
   
   // Draw stronger shadow for depth
-  ctx.fillStyle = "rgba(0,0,0,0.15)";
+  ctx.fillStyle = hasWarning ? "rgba(255, 107, 107, 0.25)" : "rgba(0,0,0,0.15)";
   ctx.fillRect(safeX + 4, safeY + 4, safePanjang, safeLebar);
   
-  // Draw furniture body with gradient
-  const gradient = ctx.createLinearGradient(safeX, safeY, safeX, safeY + safeLebar);
-  const baseColor = color || "#8B7355";
-  gradient.addColorStop(0, baseColor);
-  gradient.addColorStop(1, adjustBrightness(baseColor, -20));
-  ctx.fillStyle = gradient;
-  ctx.beginPath();
-  drawRectWithCut(ctx, safeX, safeY, safePanjang, safeLebar, cornerCut, cutSize || 20);
-  ctx.fill();
+  // Draw furniture body - PURE WHITE if has warning, gradient otherwise
+  if (hasWarning) {
+    // PURE WHITE SOLID BACKGROUND for warning items
+    ctx.fillStyle = '#FFFFFF';
+    ctx.beginPath();
+    drawRectWithCut(ctx, safeX, safeY, safePanjang, safeLebar, cornerCut, cutSize || 20);
+    ctx.fill();
+    
+    // NO pattern - keep it pure white for maximum visibility
+  } else {
+    // Normal gradient for clean items
+    const gradient = ctx.createLinearGradient(safeX, safeY, safeX, safeY + safeLebar);
+    const baseColor = color || "#8B7355";
+    gradient.addColorStop(0, baseColor);
+    gradient.addColorStop(1, adjustBrightness(baseColor, -20));
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    drawRectWithCut(ctx, safeX, safeY, safePanjang, safeLebar, cornerCut, cutSize || 20);
+    ctx.fill();
+  }
   
-  // Draw thicker border for clarity
-  ctx.strokeStyle = adjustBrightness(baseColor, -40);
-  ctx.lineWidth = 3;
+  // Draw thicker border - RED for warnings, dark for normal
+  if (hasWarning) {
+    ctx.strokeStyle = warningType === 'collision' ? '#FF3333' : '#FF9933';
+    ctx.lineWidth = 4;
+    ctx.setLineDash([8, 4]);
+  } else {
+    const baseColor = color || "#8B7355";
+    ctx.strokeStyle = adjustBrightness(baseColor, -40);
+    ctx.lineWidth = 3;
+    ctx.setLineDash([]);
+  }
   ctx.beginPath();
   drawRectWithCut(ctx, safeX, safeY, safePanjang, safeLebar, cornerCut, cutSize || 20);
   ctx.stroke();
+  ctx.setLineDash([]);
   
-  // Draw inner highlight
-  ctx.strokeStyle = "rgba(255,255,255,0.25)";
-  ctx.lineWidth = 1.5;
-  ctx.strokeRect(safeX + 3, safeY + 3, Math.max(0, safePanjang - 6), Math.max(0, safeLebar - 6));
+  // Draw inner highlight (skip for warning items)
+  if (!hasWarning) {
+    ctx.strokeStyle = "rgba(255,255,255,0.25)";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(safeX + 3, safeY + 3, Math.max(0, safePanjang - 6), Math.max(0, safeLebar - 6));
+  }
   
   // Draw spacing indicator (subtle outline showing safe zone)
-  if (!selected) {
+  if (!selected && !hasWarning) {
     ctx.strokeStyle = "rgba(100,100,100,0.15)";
     ctx.lineWidth = 1;
     ctx.setLineDash([4, 4]);
@@ -391,7 +417,13 @@ const drawFurniture = (ctx, furniture, selected = false) => {
   // Text background for better readability
   const labelText = nama.length > 15 ? nama.substring(0, 13) + "..." : nama;
   const textWidth = ctx.measureText(labelText).width;
-  ctx.fillStyle = "rgba(0,0,0,0.6)";
+  
+  if (hasWarning) {
+    // Red/Orange background for warning items
+    ctx.fillStyle = warningType === 'collision' ? "rgba(255, 51, 51, 0.95)" : "rgba(255, 153, 51, 0.95)";
+  } else {
+    ctx.fillStyle = "rgba(0,0,0,0.6)";
+  }
   ctx.fillRect(
     safeX + safePanjang / 2 - textWidth / 2 - 4,
     safeY + safeLebar / 2 - 10,
@@ -399,17 +431,23 @@ const drawFurniture = (ctx, furniture, selected = false) => {
     20
   );
   
-  // Label text
+  // Label text - always white
   ctx.fillStyle = "#FFFFFF";
   ctx.fillText(labelText, safeX + safePanjang / 2, safeY + safeLebar / 2);
   
   // Draw dimensions below name
   ctx.font = "9px Arial";
-  ctx.fillStyle = "rgba(255,255,255,0.8)";
-  ctx.fillText(`${Math.round(safePanjang)}×${Math.round(safeLebar)}`, safeX + safePanjang / 2, safeY + safeLebar / 2 + 14);
+  if (hasWarning) {
+    ctx.fillStyle = "rgba(255, 51, 51, 0.9)";
+    ctx.fillText(`${Math.round(safePanjang)}×${Math.round(safeLebar)}`, safeX + safePanjang / 2, safeY + safeLebar / 2 + 14);
+  } else {
+    ctx.fillStyle = "rgba(255,255,255,0.8)";
+    ctx.fillText(`${Math.round(safePanjang)}×${Math.round(safeLebar)}`, safeX + safePanjang / 2, safeY + safeLebar / 2 + 14);
+  }
   
-  // Draw zone indicator badge
-  if (zone) {
+  // Zone indicator badge (no warning badges)
+  if (!hasWarning && zone) {
+    // Draw zone indicator badge for clean items
     const badgeX = safeX + safePanjang - 8;
     const badgeY = safeY + 8;
     const badgeSize = 24;
@@ -596,7 +634,7 @@ export default function LayoutSimplified() {
   const [placed, setPlaced] = useState([]);
   const [floorLayouts, setFloorLayouts] = useState({}); // Store layouts per floor
   const [currentFloor, setCurrentFloor] = useState(1);
-  const [roomType, setRoomType] = useState("living_room");
+  const [roomType] = useState("living_room"); // eslint-disable-line no-unused-vars
   const [filterCategory, setFilterCategory] = useState("all");
   const [loading, setLoading] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
@@ -605,7 +643,16 @@ export default function LayoutSimplified() {
   const [isResizing, setIsResizing] = useState(false);
   const [resizeHandle, setResizeHandle] = useState(null); // 'nw' | 'ne' | 'sw' | 'se'
   const [snap, setSnap] = useState(true);
+  const [capacityWarning, setCapacityWarning] = useState(null); // Warning message for capacity
+  
+  // Save Layout States
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [layoutName, setLayoutName] = useState('');
+  const [saveAsPublic, setSaveAsPublic] = useState(false);
+  const [userIdForSave] = useState(1); // eslint-disable-line no-unused-vars
+  
   const canvasRef = useRef();
+  const canvasContainerRef = useRef(); // For PDF generation
   const prevFloorRef = useRef(currentFloor);
 
   useEffect(() => { 
@@ -613,6 +660,69 @@ export default function LayoutSimplified() {
       // Model status loaded if needed
     }); 
   }, []);
+  
+  // Check capacity when cart changes
+  useEffect(() => {
+    checkLayoutCapacity();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cart, currentFloor]);
+  
+  // Function to check if furniture can fit in layout - LIMITED MODE
+  const checkLayoutCapacity = () => {
+    if (cart.length === 0) {
+      setCapacityWarning(null);
+      return;
+    }
+    
+    // Check max items limit (4-5 items)
+    const MAX_ITEMS = LAYOUT_CONFIG.MAX_ITEMS || 5;
+    
+    if (cart.length > MAX_ITEMS) {
+      setCapacityWarning({
+        level: 'critical',
+        message: `⚠️ BATAS TERLAMPAUI! Anda memilih ${cart.length} items. Maksimal hanya ${MAX_ITEMS} items yang diperbolehkan!`,
+        percentage: (cart.length / MAX_ITEMS) * 100
+      });
+      return;
+    }
+    
+    // Calculate total area of furniture in cart
+    const totalFurnitureArea = cart.reduce((sum, item) => {
+      const panjang = item.panjang || 100;
+      const lebar = item.lebar || 100;
+      return sum + (panjang * lebar);
+    }, 0);
+    
+    // Canvas area
+    const canvasArea = CANVAS_WIDTH * CANVAS_HEIGHT;
+    
+    // Calculate usage percentage
+    const usagePercentage = (totalFurnitureArea / canvasArea) * 100;
+    const MAX_COVERAGE = (LAYOUT_CONFIG.MAX_COVERAGE_RATIO || 0.30) * 100;
+    
+    // Set warning levels
+    if (usagePercentage > MAX_COVERAGE) {
+      setCapacityWarning({
+        level: 'critical',
+        message: `⚠️ KAPASITAS PENUH! ${cart.length}/${MAX_ITEMS} items (${usagePercentage.toFixed(1)}% > ${MAX_COVERAGE}% max coverage). Furniture kemungkinan tidak akan muat!`,
+        percentage: usagePercentage
+      });
+    } else if (cart.length >= MAX_ITEMS - 1) {
+      setCapacityWarning({
+        level: 'warning',
+        message: `⚠️ Mendekati batas: ${cart.length}/${MAX_ITEMS} items (${usagePercentage.toFixed(1)}% coverage). Hanya bisa tambah ${MAX_ITEMS - cart.length} item lagi.`,
+        percentage: usagePercentage
+      });
+    } else if (cart.length >= Math.floor(MAX_ITEMS * 0.6)) {
+      setCapacityWarning({
+        level: 'info',
+        message: `ℹ️ ${cart.length}/${MAX_ITEMS} items dipilih (${usagePercentage.toFixed(1)}% coverage). Masih bisa tambah ${MAX_ITEMS - cart.length} item.`,
+        percentage: usagePercentage
+      });
+    } else {
+      setCapacityWarning(null);
+    }
+  };
   
   // Save and load floor layouts when switching floors
   useEffect(() => {
@@ -710,65 +820,117 @@ export default function LayoutSimplified() {
   const autoLayout = async () => {
     try {
       if (cart.length === 0) {
-        alert('Cart is empty! Please add furniture first.');
+        NotificationManager.warning(
+          '⚠️ Cart Kosong',
+          'Silakan tambahkan furniture terlebih dahulu.\n\nMaksimal: 4-5 items furniture'
+        );
         return;
       }
       
-      setLoading(true);
-      const res = await api.predictLayout(cart, roomType, floorConfig[currentFloor]);
+      const MAX_ITEMS = LAYOUT_CONFIG.MAX_ITEMS || 5;
       
-      if (res.status === 'success' && res.data) {
-        const placedItems = res.data.map((p) => {
-          // Find original item from cart
-          const cartItem = cart.find(c => c.id === p.id || c.name === p.nama);
-          
-          return {
-            ...p,
-            x: p.posisi_x || 100,
-            y: p.posisi_y || 100,
-            panjang: p.panjang || cartItem?.panjang || 100,
-            lebar: p.lebar || cartItem?.lebar || 100,
-            nama: p.nama || cartItem?.name || "Furniture",
-            uid: `${p.id || p.nama}-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,
-            cornerCut: 'none',
-            cutSize: 20,
-            color: cartItem?.color || "#8B7355",
-            zone: p.zone || "center"
-          };
-        });
-        
-        setPlaced(placedItems);
-        
-        // Save to floor layouts
-        setFloorLayouts(prev => ({
-          ...prev,
-          [currentFloor]: placedItems
-        }));
-        
-        setSelectedId(null);
-        
-        // Enhanced success message with details
-        const zoneStats = placedItems.reduce((acc, item) => {
-          acc[item.zone] = (acc[item.zone] || 0) + 1;
-          return acc;
-        }, {});
-        
-        const statsMessage = Object.entries(zoneStats)
-          .map(([zone, count]) => `  ${zone}: ${count} items`)
-          .join('\n');
-        
-        alert(`Layout generated successfully!\n\n${res.total_placed} items placed\nRoom: ${res.room_type.replace('_', ' ')}\nLantai: ${currentFloor}\n\nZone Distribution:\n${statsMessage}\n\nLayout saved for this floor`);
-      } else {
-        alert('Layout generation failed: ' + (res.message || 'Unknown error'));
+      // Check if exceeds max items
+      if (cart.length > MAX_ITEMS) {
+        NotificationManager.confirm(
+          '⚠️ BATAS FURNITURE TERLAMPAUI!',
+          `Anda memilih: ${cart.length} items\nMaksimal: ${MAX_ITEMS} items\n\nSistem hanya akan menempatkan ${MAX_ITEMS} items pertama.\nApakah Anda ingin melanjutkan?`,
+          async () => {
+            // Proceed with layout
+            await executeAutoLayout(MAX_ITEMS);
+          },
+          null,
+          'Lanjutkan',
+          'Batal'
+        );
+        return;
       }
+      
+      // Check if capacity is critical
+      if (capacityWarning && capacityWarning.level === 'critical') {
+        NotificationManager.confirm(
+          '⚠️ PERINGATAN KAPASITAS!',
+          `Items dipilih: ${cart.length} (Max: ${MAX_ITEMS})\nKapasitas: ${capacityWarning.percentage.toFixed(1)}%\n\nFurniture kemungkinan akan:\n• Tumpang tindih dengan item lain\n• Melebihi batas lantai\n• Tidak sesuai spesifikasi ukuran\n\n⬜ Furniture yang bermasalah akan ditampilkan dengan:\n• Background PUTIH di canvas\n• Border MERAH (overlap) atau ORANGE (terlalu dekat)\n\nApakah Anda tetap ingin melanjutkan?`,
+          async () => {
+            await executeAutoLayout(MAX_ITEMS);
+          },
+          null,
+          'Lanjutkan',
+          'Batal'
+        );
+        return;
+      }
+      
+      await executeAutoLayout(MAX_ITEMS);
+      
     } catch (error) {
       console.error('Auto layout error:', error);
-      alert(error.message + '\n\nPlease check:\n1. Flask backend is running (python app.py)\n2. Backend is accessible at http://localhost:5000');
+      NotificationManager.error(
+        '❌ Error',
+        `${error.message}\n\nPastikan:\n• Flask backend sudah running (python app.py)\n• Backend dapat diakses di http://localhost:5000\n• Jumlah furniture tidak melebihi ${LAYOUT_CONFIG.MAX_ITEMS || 5} items`
+      );
     } finally {
       setLoading(false);
     }
   };
+  
+  const executeAutoLayout = async (MAX_ITEMS) => {
+    setLoading(true);
+    const res = await api.predictLayout(cart, roomType, floorConfig[currentFloor]);
+    
+    if (res.status === 'success' && res.data) {
+      const placedItems = res.data.map((p) => {
+        // Find original item from cart
+        const cartItem = cart.find(c => c.id === p.id || c.name === p.nama);
+        
+        return {
+          ...p,
+          x: p.posisi_x || 100,
+          y: p.posisi_y || 100,
+          panjang: p.panjang || cartItem?.panjang || 100,
+          lebar: p.lebar || cartItem?.lebar || 100,
+          nama: p.nama || cartItem?.name || "Furniture",
+          uid: `${p.id || p.nama}-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,
+          cornerCut: 'none',
+          cutSize: 20,
+          color: cartItem?.color || "#8B7355",
+          zone: p.zone || "center"
+        };
+      });
+      
+      setPlaced(placedItems);
+      
+      // Save to floor layouts
+      setFloorLayouts(prev => ({
+        ...prev,
+        [currentFloor]: placedItems
+      }));
+      
+      setSelectedId(null);
+      
+      // Enhanced success message with limits info
+      const zoneStats = placedItems.reduce((acc, item) => {
+        acc[item.zone] = (acc[item.zone] || 0) + 1;
+        return acc;
+      }, {});
+      
+      const statsMessage = Object.entries(zoneStats)
+        .map(([zone, count]) => `  ${zone}: ${count} items`)
+        .join('\n');
+      
+      NotificationManager.success(
+        '✅ Layout Berhasil Di-generate!',
+        `Mode: LIMITED (Max ${MAX_ITEMS} items)\nItems placed: ${res.total_placed}/${MAX_ITEMS}\nRoom: ${res.room_type.replace('_', ' ')}\nLantai: ${currentFloor}\n\nZone Distribution:\n${statsMessage}\n\n⬜ FURNITURE BERWARNA PUTIH\nFurniture dengan background PUTIH di canvas menunjukkan:\n• Overlap dengan furniture lain, atau\n• Jarak terlalu dekat (< 80cm)\n\n⚠ Icon Warning:\n• Badge ⚠ putih dengan border merah/orange\n• Text "ITEM PUTIH" di bawah furniture\n\n💡 Klik furniture putih untuk adjust posisi/ukuran\nLayout tersimpan untuk lantai ini`,
+        10000
+      );
+    } else {
+      NotificationManager.error(
+        '❌ Layout Generation Gagal',
+        res.message || 'Unknown error'
+      );
+    }
+  };
 
+  // eslint-disable-next-line no-unused-vars
   const autoPlaceAllFurniture = async () => {
     try {
       setLoading(true);
@@ -857,26 +1019,37 @@ export default function LayoutSimplified() {
         const validationMsg = generateValidationMessage(validation, backendValidation, retryCount, res);
         
         const warningItems = itemsWithWarnings.filter(i => i.hasWarning);
-        const finalMessage = [
-          validationMsg,
-          '',
-          warningItems.length > 0 ? 'WARNING - ITEMS DENGAN WARNING (PUTIH):' : '',
-          ...warningItems.slice(0, 5).map((item, idx) => 
-            `   ${idx + 1}. ${item.nama} - ${item.warningType === 'collision' ? 'OVERLAP!' : 'Terlalu dekat'}`
-          ),
-          warningItems.length > 5 ? `   ... dan ${warningItems.length - 5} items lainnya` : '',
-          '',
-          'TIP: Items berwarna PUTIH perlu di-adjust secara manual!',
-          '   Klik item untuk edit posisi/ukuran.'
-        ].filter(line => line !== '').join('\n');
+        const hasOverlap = validation.collisionCount > 0;
         
-        alert(finalMessage);
+        if (hasOverlap) {
+          const warningList = warningItems.slice(0, 5).map((item, idx) => 
+            `   ${idx + 1}. ⬜ ${item.nama} - ${item.warningType === 'collision' ? 'OVERLAP!' : 'Terlalu dekat'}`
+          ).join('\n');
+          
+          NotificationManager.warning(
+            '⚠️ Layout Selesai dengan Warning',
+            `${validationMsg}\n\n⬜ FURNITURE BERWARNA PUTIH (PERLU ADJUSTMENT):\n${warningList}${warningItems.length > 5 ? `\n   ... dan ${warningItems.length - 5} items lainnya` : ''}\n\n💡 Furniture dengan icon ⬜ (putih) di canvas perlu di-adjust!\n• Background PUTIH = ada masalah\n• Border MERAH = overlap/tumpang tindih\n• Border ORANGE = terlalu dekat\n\nKlik furniture untuk edit posisi/ukuran.`,
+            10000
+          );
+        } else {
+          NotificationManager.success(
+            '✅ Layout Berhasil!',
+            `${validationMsg}\n\n⬜ SEMUA FURNITURE OK\nSemua furniture ditempatkan dengan baik tanpa overlap.`,
+            8000
+          );
+        }
       } else {
-        alert('Auto placement failed: ' + (res.message || 'Unknown error'));
+        NotificationManager.error(
+          '❌ Auto Placement Gagal',
+          res.message || 'Unknown error'
+        );
       }
     } catch (error) {
       console.error('Auto place all error:', error);
-      alert('Failed to auto-place furniture. Please ensure backend is running.');
+      NotificationManager.error(
+        '❌ Gagal Auto-place Furniture',
+        'Pastikan backend sudah running.'
+      );
     } finally {
       setLoading(false);
     }
@@ -1040,9 +1213,96 @@ export default function LayoutSimplified() {
     }));
   };
 
+  // Save Layout to Database
+  const handleSaveLayout = async () => {
+    if (!layoutName.trim()) {
+      NotificationManager.warning('⚠️ Warning', 'Please enter a layout name');
+      return;
+    }
+
+    if (placed.length === 0) {
+      NotificationManager.warning('⚠️ Warning', 'No furniture placed to save');
+      return;
+    }
+
+    setLoading(true);
+    
+    try {
+      // Step 1: Generate PDF from canvas
+      NotificationManager.info('📄 Info', 'Generating PDF...');
+      
+      const canvasElement = canvasContainerRef.current;
+      if (!canvasElement) {
+        throw new Error('Canvas not found');
+      }
+
+      // Capture canvas as image
+      const canvas = await html2canvas(canvasElement, {
+        backgroundColor: '#ffffff',
+        scale: 2, // Higher quality
+        logging: false,
+        useCORS: true
+      });
+
+      // Convert to PDF
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({
+        orientation: 'landscape',
+        unit: 'px',
+        format: [canvas.width, canvas.height]
+      });
+      
+      pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+      
+      // Step 2: Auto-download PDF
+      const pdfFileName = `${layoutName.trim().replace(/\s+/g, '_')}_${Date.now()}.pdf`;
+      pdf.save(pdfFileName);
+      NotificationManager.success('✅ Success', 'PDF downloaded!');
+
+      // Step 3: Convert PDF to base64 for database
+      const pdfBase64 = pdf.output('datauristring'); // Gets base64 data URI
+      
+      // Step 4: Save to database with PDF thumbnail
+      NotificationManager.info('💾 Info', 'Saving to database...');
+      
+      const layoutData = {
+        user_id: userIdForSave,
+        layout_name: layoutName.trim(),
+        house_type: selectedHouseType?.name || 'Custom',
+        layout_data: {
+          currentFloor: currentFloor,
+          placed: placed,
+          floorLayouts: floorLayouts,
+          cart: cart,
+          roomType: roomType,
+          houseType: selectedHouseType
+        },
+        thumbnail: pdfBase64, // Save PDF as thumbnail
+        is_public: saveAsPublic ? 1 : 0
+      };
+
+      const response = await cmsApi.saveLayout(layoutData);
+      
+      if (response.status === 'success') {
+        NotificationManager.success('✅ Success', 'Layout saved to database!');
+        setShowSaveModal(false);
+        setLayoutName('');
+        setSaveAsPublic(false);
+      } else {
+        NotificationManager.error('❌ Error', response.message || 'Failed to save layout');
+      }
+    } catch (error) {
+      console.error('Save layout error:', error);
+      NotificationManager.error('❌ Error', `Failed: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const filteredFurniture = filterCategory === "all" 
     ? furnitureList 
     : furnitureList.filter(f => f.category === filterCategory);
+
 
   const categories = [
     { value: "all", label: "All" },
@@ -1053,6 +1313,7 @@ export default function LayoutSimplified() {
     { value: "kitchen", label: "Kitchen" },
   ];
 
+  // eslint-disable-next-line no-unused-vars
   const roomTypes = [
     { value: "living_room", label: "Living Room" },
     { value: "bedroom", label: "Bedroom" },
@@ -1371,31 +1632,149 @@ export default function LayoutSimplified() {
               </div>
 
               <div className="furniture-list">
-                {filteredFurniture.map((f) => (
-                  <div key={f.id} className="f-card">
-                    <div className="f-info">
-                      <div className="f-details">
-                        <span className="f-name">{f.nama}</span>
-                        <span className="f-size">{f.panjang}×{f.lebar}cm</span>
-                        <span className="f-category">{f.category}</span>
+                {filteredFurniture.map((f) => {
+                  // Check if furniture is too big for the room
+                  // Furniture dimensions are already in pixels (matching canvas scale)
+                  const furnitureWidth = f.panjang; // pixels
+                  const furnitureLength = f.lebar; // pixels
+                  const canvasWidth = 800; // 800px canvas width
+                  const canvasHeight = 800; // 800px canvas height
+                  
+                  // Furniture should be smaller than canvas to fit with some margin
+                  const isTooLarge = furnitureWidth > (canvasWidth - 50) || furnitureLength > (canvasHeight - 50);
+                  
+                  // Get icon based on furniture category and name
+                  const getFurnitureIcon = (furniture) => {
+                    const name = furniture.nama.toLowerCase();
+                    const cat = furniture.category;
+                    
+                    if (name.includes('sofa')) return '🛋️';
+                    if (name.includes('kursi pantai')) return '🏖️';
+                    if (name.includes('kursi makan')) return '🪑';
+                    if (name.includes('kursi')) return '💺';
+                    if (name.includes('meja makan')) return '🍽️';
+                    if (name.includes('meja')) return '⬛';
+                    if (name.includes('lukisan')) return '🖼️';
+                    if (name.includes('stand lukisan')) return '🎨';
+                    if (name.includes('bunga') || name.includes('pas bunga')) return '🪴';
+                    if (cat === 'living') return '🏠';
+                    if (cat === 'dining') return '🍴';
+                    if (cat === 'outdoor') return '⛱️';
+                    if (cat === 'decoration') return '✨';
+                    return '📦';
+                  };
+                  
+                  const icon = getFurnitureIcon(f);
+                  
+                  return (
+                    <div key={f.id} className={`f-card ${isTooLarge ? 'furniture-too-large' : ''}`}>
+                      <div className="f-icon">{icon}</div>
+                      <div className="f-info">
+                        <div className="f-details">
+                          <span className="f-name">{f.nama}</span>
+                          <span className="f-size">{f.panjang}×{f.lebar}cm</span>
+                          <span className="f-category">{f.category}</span>
+                          {isTooLarge && (
+                            <span className="size-warning" style={{
+                              color: '#ff4444',
+                              fontSize: '10px',
+                              fontWeight: 'bold',
+                              display: 'block',
+                              marginTop: '4px'
+                            }}>
+                              ⚠ Terlalu besar untuk canvas
+                            </span>
+                          )}
+                        </div>
                       </div>
+                      <button 
+                        className="btn btn-add" 
+                        disabled={isTooLarge}
+                        onClick={() => {
+                          if (isTooLarge) {
+                            NotificationManager.error(
+                              'Furniture Terlalu Besar',
+                              `${icon} ${f.nama} (${f.panjang}×${f.lebar}cm) tidak bisa dimasukkan karena lebih besar dari ukuran canvas (${canvasWidth}×${canvasHeight}px)`,
+                              5000
+                            );
+                            return;
+                          }
+                          setCart(c => [...c, f]);
+                        }}
+                        style={isTooLarge ? {
+                          opacity: 0.4,
+                          cursor: 'not-allowed',
+                          backgroundColor: '#ccc'
+                        } : {}}
+                      >
+                        <span>{isTooLarge ? '✗' : '+'}</span>
+                      </button>
                     </div>
-                    <button className="btn btn-add" onClick={() => setCart(c => [...c, f])}>
-                      <span>+</span>
-                    </button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
               
               {cart.length > 0 && (
                 <div className="cart-summary">
-                  <h5>Selected Items ({cart.length})</h5>
+                  <h5>Selected Items ({cart.length}/{LAYOUT_CONFIG.MAX_ITEMS || 5})</h5>
+                  
+                  {capacityWarning && (
+                    <div className={`capacity-warning ${capacityWarning.level}`}>
+                      <div className="warning-message">{capacityWarning.message}</div>
+                      <div className="capacity-bar">
+                        <div 
+                          className="capacity-fill" 
+                          style={{
+                            width: `${Math.min(capacityWarning.percentage, 100)}%`,
+                            backgroundColor: 
+                              capacityWarning.level === 'critical' ? '#ff4444' :
+                              capacityWarning.level === 'warning' ? '#ffaa00' :
+                              '#4CAF50'
+                          }}
+                        ></div>
+                      </div>
+                      {capacityWarning.level === 'critical' && (
+                        <div style={{marginTop: '8px', fontSize: '11px', color: '#d32f2f'}}>
+                          💡 Saran: Kurangi jumlah atau ukuran furniture untuk hasil optimal
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  
                   <div className="cart-items">
-                    {cart.map((item, idx) => (
-                      <span key={idx} className="cart-chip">
-                        {item.nama}
-                      </span>
-                    ))}
+                    {cart.map((item, idx) => {
+                      // Get icon for cart item
+                      const getCartIcon = (furniture) => {
+                        const name = furniture.nama.toLowerCase();
+                        if (name.includes('sofa')) return '🛋️';
+                        if (name.includes('kursi pantai')) return '🏖️';
+                        if (name.includes('kursi makan')) return '🪑';
+                        if (name.includes('kursi')) return '💺';
+                        if (name.includes('meja makan')) return '🍽️';
+                        if (name.includes('meja')) return '⬛';
+                        if (name.includes('lukisan')) return '🖼️';
+                        if (name.includes('stand lukisan')) return '🎨';
+                        if (name.includes('bunga') || name.includes('pas bunga')) return '🪴';
+                        return '📦';
+                      };
+                      
+                      return (
+                        <span key={idx} className="cart-chip">
+                          <span className="cart-chip-icon">{getCartIcon(item)}</span>
+                          {item.nama}
+                          <button 
+                            className="cart-chip-remove"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setCart(c => c.filter((_, i) => i !== idx));
+                            }}
+                            title="Remove item"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      );
+                    })}
                   </div>
                   <button className="btn btn-clear" onClick={() => setCart([])}>
                     Clear All
@@ -1463,9 +1842,23 @@ export default function LayoutSimplified() {
                       Reset
                     </button>
                   )}
+                  {placed.length > 0 && (
+                    <button 
+                      className="btn btn-save" 
+                      onClick={() => setShowSaveModal(true)}
+                      title="Save layout to database"
+                      style={{ 
+                        background: '#28a745', 
+                        color: '#fff',
+                        marginLeft: '0.5rem'
+                      }}
+                    >
+                      💾 Save Layout
+                    </button>
+                  )}
                 </div>
               </div>
-              <div className="canvas-wrapper">
+              <div className="canvas-wrapper" ref={canvasContainerRef}>
                 <canvas ref={canvasRef} width={CANVAS_WIDTH} height={CANVAS_HEIGHT} />
                 {selectedId && (
                   <div className="selected-inspector">
@@ -1518,13 +1911,35 @@ export default function LayoutSimplified() {
                 )}
                 {placed.length > 0 && (
                   <div className="canvas-legend">
-                    <h5>Zone Legend:</h5>
+                    <h5>Legend & Status:</h5>
                     <div className="legend-items">
-                      <span className="legend-item"><span className="zone-badge zone-wall">W</span> Wall</span>
-                      <span className="legend-item"><span className="zone-badge zone-center">C</span> Center</span>
-                      <span className="legend-item"><span className="zone-badge zone-corner">R</span> Corner</span>
-                      <span className="legend-item"><span className="zone-badge zone-accent">A</span> Accent</span>
-                      <span className="legend-item"><span className="zone-badge zone-bedside">B</span> Bedside</span>
+                      <span className="legend-item" style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
+                        <span style={{
+                          width: '32px', 
+                          height: '32px', 
+                          background: '#FFFFFF', 
+                          border: '3px solid #FF3333',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '18px',
+                          fontWeight: 'bold'
+                        }}>⚠</span>
+                        <strong>⬜ Furniture Putih = Perlu Adjustment</strong>
+                      </span>
+                      <span className="legend-item"><span className="zone-badge zone-wall">W</span> Wall Zone</span>
+                      <span className="legend-item"><span className="zone-badge zone-center">C</span> Center Zone</span>
+                      <span className="legend-item"><span className="zone-badge zone-corner">R</span> Corner Zone</span>
+                    </div>
+                    <div className="legend-info" style={{marginTop: '8px', padding: '12px', background: 'rgba(255,255,255,0.95)', borderRadius: '4px', fontSize: '11px', border: '2px solid #000'}}>
+                      <div><strong>📏 Limits:</strong> Max {LAYOUT_CONFIG.MAX_ITEMS || 5} items | Max 30% floor coverage | 80cm spacing</div>
+                      <div style={{marginTop: '6px', padding: '8px', background: '#FFF3CD', border: '2px solid #FF9800'}}>
+                        <strong>⬜ FURNITURE PUTIH:</strong>
+                        <div style={{marginTop: '4px'}}>• Background PUTIH = ada masalah (overlap/terlalu dekat)</div>
+                        <div>• Border MERAH = overlap/tumpang tindih</div>
+                        <div>• Border ORANGE = jarak terlalu dekat (&lt; 80cm)</div>
+                      </div>
+                      <div style={{marginTop: '4px'}}><strong>💡 Tip:</strong> Klik furniture PUTIH untuk adjust posisi/ukuran!</div>
                     </div>
                   </div>
                 )}
@@ -1532,6 +1947,79 @@ export default function LayoutSimplified() {
             </div>
           </div>
         </>
+      )}
+
+      {/* Save Layout Modal */}
+      {showSaveModal && (
+        <div className="modal-overlay" onClick={() => setShowSaveModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Save Layout</h2>
+              <button className="modal-close" onClick={() => setShowSaveModal(false)}>×</button>
+            </div>
+            
+            <div className="modal-body">
+              <div className="form-group">
+                <label htmlFor="layout-name">Nama Layout</label>
+                <input
+                  id="layout-name"
+                  type="text"
+                  value={layoutName}
+                  onChange={(e) => setLayoutName(e.target.value)}
+                  placeholder="Contoh: Desain Ruang Tamu Saya"
+                  className="modal-input"
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="checkbox-label">
+                  <input 
+                    type="checkbox" 
+                    checked={saveAsPublic} 
+                    onChange={(e) => setSaveAsPublic(e.target.checked)} 
+                    className="modal-checkbox"
+                  />
+                  <span>Jadikan layout ini public (orang lain bisa lihat)</span>
+                </label>
+              </div>
+
+              <div className="layout-info">
+                <div className="info-row">
+                  <span className="info-label">Tipe Rumah:</span>
+                  <span className="info-value">{selectedHouseType?.name || 'Custom'}</span>
+                </div>
+                <div className="info-row">
+                  <span className="info-label">Tipe Ruangan:</span>
+                  <span className="info-value">{roomType}</span>
+                </div>
+                <div className="info-row">
+                  <span className="info-label">Lantai:</span>
+                  <span className="info-value">Lantai {currentFloor}</span>
+                </div>
+                <div className="info-row">
+                  <span className="info-label">Jumlah Furniture:</span>
+                  <span className="info-value">{placed.length} items</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="modal-footer">
+              <button 
+                className="btn btn-cancel" 
+                onClick={() => setShowSaveModal(false)}
+              >
+                Batal
+              </button>
+              <button 
+                className="btn btn-primary" 
+                onClick={handleSaveLayout} 
+                disabled={loading || !layoutName.trim()}
+              >
+                {loading ? 'Menyimpan...' : 'Simpan'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

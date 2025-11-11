@@ -3,6 +3,7 @@ import { CMSContext } from '../../contexts/CMSContext';
 import { ThemeContext } from '../../contexts/ThemeContext';
 import { cmsApi } from '../../services/cmsApi';
 import '../../styles/AdminDashboard.css';
+import { NotificationManager } from '../../components/Notification';
 
 function AdminDashboard() {
   const { content, refreshContent } = useContext(CMSContext);
@@ -21,12 +22,34 @@ function AdminDashboard() {
   const [newArticle, setNewArticle] = useState({ title: '', excerpt: '', content: '', image: '', category: 'General', author: 'Admin' });
   const [uploadingImage, setUploadingImage] = useState(false);
 
+  // FAQ STATE
+  const [faqList, setFaqList] = useState([]);
+  const [newFaq, setNewFaq] = useState({ category: 'Umum', question: '', answer: '', display_order: 0, is_active: 1 });
+  const [editingFaq, setEditingFaq] = useState(null);
+
   // Q&A STATE
   const [questionsList, setQuestionsList] = useState([]);
   const [selectedQuestion, setSelectedQuestion] = useState(null);
   const [answerText, setAnswerText] = useState('');
   const [answeredBy, setAnsweredBy] = useState('Admin');
   const [qnaFilter, setQnaFilter] = useState('all'); // all, pending, answered
+
+  // CONTACT MESSAGES STATE
+  const [contactMessages, setContactMessages] = useState([]);
+  const [messageFilter, setMessageFilter] = useState('all'); // all, new, read
+
+  // SOCIAL MEDIA STATE
+  const [socialMediaList, setSocialMediaList] = useState([]);
+  const [newSocial, setNewSocial] = useState({ platform: '', platform_name: '', url: '', icon: '', display_order: 0, is_active: 1 });
+  const [editingSocial, setEditingSocial] = useState(null);
+
+  // HOUSE LAYOUTS STATE
+  const [layoutsList, setLayoutsList] = useState([]);
+  const [layoutsFilter, setLayoutsFilter] = useState('all'); // all, public, private
+
+  // ACTIVITY LOGS STATE
+  const [activityLogs, setActivityLogs] = useState([]);
+  const [logsLimit, setLogsLimit] = useState(100);
 
   /* ===============================
      AUTH HANDLING
@@ -49,6 +72,57 @@ function AdminDashboard() {
   };
 
   /* ===============================
+     FAQ HANDLING
+  =============================== */
+  useEffect(() => {
+    if (isAuthenticated && activeSection === 'faq') loadFaqs();
+  }, [isAuthenticated, activeSection]);
+
+  const loadFaqs = async () => {
+    const res = await cmsApi.getAllFAQs();
+    if (res.status === 'success') setFaqList(res.faqs || []);
+  };
+
+  const handleCreateFaq = async () => {
+    if (!newFaq.question || !newFaq.answer) {
+      NotificationManager.warning('⚠️ Incomplete', 'Question and answer are required');
+      return;
+    }
+
+    const res = await cmsApi.createFAQ(newFaq);
+    if (res.status === 'success') {
+      NotificationManager.success('✅ Success', 'FAQ created successfully');
+      setNewFaq({ category: 'Umum', question: '', answer: '', display_order: 0, is_active: 1 });
+      loadFaqs();
+    } else {
+      NotificationManager.error('❌ Error', res.message || 'Failed to create FAQ');
+    }
+  };
+
+  const handleUpdateFaq = async (id, data) => {
+    const res = await cmsApi.updateFAQ(id, data);
+    if (res.status === 'success') {
+      NotificationManager.success('✅ Success', 'FAQ updated successfully');
+      setEditingFaq(null);
+      loadFaqs();
+    } else {
+      NotificationManager.error('❌ Error', res.message || 'Failed to update FAQ');
+    }
+  };
+
+  const handleDeleteFaq = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this FAQ?')) return;
+
+    const res = await cmsApi.deleteFAQ(id);
+    if (res.status === 'success') {
+      NotificationManager.success('✅ Success', 'FAQ deleted successfully');
+      loadFaqs();
+    } else {
+      NotificationManager.error('❌ Error', res.message || 'Failed to delete FAQ');
+    }
+  };
+
+  /* ===============================
      Q&A HANDLING
   =============================== */
   useEffect(() => {
@@ -56,14 +130,9 @@ function AdminDashboard() {
   }, [isAuthenticated, activeSection]);
 
   const loadQuestions = async () => {
-    try {
-      const response = await fetch('http://localhost:5000/api/questions/all');
-      const data = await response.json();
-      if (data.status === 'success') {
-        setQuestionsList(data.data);
-      }
-    } catch (error) {
-      console.error('Error loading questions:', error);
+    const res = await cmsApi.getAllQuestions();
+    if (res.status === 'success') {
+      setQuestionsList(res.data || []);
     }
   };
 
@@ -75,52 +144,175 @@ function AdminDashboard() {
 
   const submitAnswer = async () => {
     if (!selectedQuestion || !answerText.trim()) {
-      setMessage({ text: 'Please provide an answer', type: 'error' });
+      NotificationManager.warning('⚠️ Incomplete', 'Please provide an answer');
       return;
     }
 
-    try {
-      const response = await fetch(`http://localhost:5000/api/questions/${selectedQuestion.id}/answer`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ answer: answerText, answered_by: answeredBy })
-      });
+    const res = await cmsApi.answerQuestion(selectedQuestion.id, {
+      answer: answerText,
+      answered_by: answeredBy
+    });
 
-      const data = await response.json();
-      if (data.status === 'success') {
-        setMessage({ text: 'Question answered successfully!', type: 'success' });
-        setSelectedQuestion(null);
-        setAnswerText('');
-        loadQuestions();
-      } else {
-        setMessage({ text: data.message || 'Failed to answer question', type: 'error' });
-      }
-    } catch (error) {
-      setMessage({ text: 'Failed to submit answer', type: 'error' });
+    if (res.status === 'success') {
+      NotificationManager.success('✅ Success', 'Question answered successfully');
+      setSelectedQuestion(null);
+      setAnswerText('');
+      loadQuestions();
+    } else {
+      NotificationManager.error('❌ Error', res.message || 'Failed to answer question');
     }
   };
 
   const deleteQuestion = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this question?')) return;
-
-    try {
-      const response = await fetch(`http://localhost:5000/api/questions/${id}`, {
-        method: 'DELETE'
-      });
-
-      const data = await response.json();
-      if (data.status === 'success') {
-        setMessage({ text: 'Question deleted successfully', type: 'success' });
-        loadQuestions();
-      }
-    } catch (error) {
-      setMessage({ text: 'Failed to delete question', type: 'error' });
-    }
+    NotificationManager.confirm(
+      '⚠️ Konfirmasi Hapus',
+      'Apakah Anda yakin ingin menghapus pertanyaan ini?',
+      async () => {
+        const res = await cmsApi.deleteQuestion(id);
+        if (res.status === 'success') {
+          NotificationManager.success('✅ Success', 'Question deleted successfully');
+          loadQuestions();
+        } else {
+          NotificationManager.error('❌ Error', res.message || 'Failed to delete question');
+        }
+      },
+      null,
+      'Hapus',
+      'Batal'
+    );
   };
 
   const filteredQuestions = qnaFilter === 'all' 
     ? questionsList 
     : questionsList.filter(q => q.status === qnaFilter);
+
+  /* ===============================
+     CONTACT MESSAGES HANDLING
+  =============================== */
+  useEffect(() => {
+    if (isAuthenticated && activeSection === 'contact') loadContactMessages();
+  }, [isAuthenticated, activeSection]);
+
+  const loadContactMessages = async () => {
+    const res = await cmsApi.getContactMessages();
+    if (res.status === 'success') setContactMessages(res.data || []);
+  };
+
+  const handleMarkAsRead = async (id) => {
+    const res = await cmsApi.markMessageRead(id);
+    if (res.status === 'success') {
+      NotificationManager.success('✅ Success', 'Message marked as read');
+      loadContactMessages();
+    }
+  };
+
+  const handleDeleteMessage = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this message?')) return;
+    const res = await cmsApi.deleteContactMessage(id);
+    if (res.status === 'success') {
+      NotificationManager.success('✅ Success', 'Message deleted');
+      loadContactMessages();
+    }
+  };
+
+  const filteredMessages = messageFilter === 'all'
+    ? contactMessages
+    : contactMessages.filter(m => m.status === messageFilter);
+
+  /* ===============================
+     SOCIAL MEDIA HANDLING
+  =============================== */
+  useEffect(() => {
+    if (isAuthenticated && activeSection === 'social') loadSocialMedia();
+  }, [isAuthenticated, activeSection]);
+
+  const loadSocialMedia = async () => {
+    const res = await cmsApi.getSocialMedia();
+    if (res.status === 'success') setSocialMediaList(res.data || []);
+  };
+
+  const handleCreateSocial = async () => {
+    if (!newSocial.platform || !newSocial.url) {
+      NotificationManager.warning('⚠️ Incomplete', 'Platform and URL are required');
+      return;
+    }
+
+    const res = await cmsApi.createSocialMedia(newSocial);
+    if (res.status === 'success') {
+      NotificationManager.success('✅ Success', 'Social media link created');
+      setNewSocial({ platform: '', platform_name: '', url: '', icon: '', display_order: 0, is_active: 1 });
+      loadSocialMedia();
+    }
+  };
+
+  const handleUpdateSocial = async (id, data) => {
+    const res = await cmsApi.updateSocialMedia(id, data);
+    if (res.status === 'success') {
+      NotificationManager.success('✅ Success', 'Social media link updated');
+      setEditingSocial(null);
+      loadSocialMedia();
+    }
+  };
+
+  const handleDeleteSocial = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this social media link?')) return;
+    const res = await cmsApi.deleteSocialMedia(id);
+    if (res.status === 'success') {
+      NotificationManager.success('✅ Success', 'Social media link deleted');
+      loadSocialMedia();
+    }
+  };
+
+  /* ===============================
+     HOUSE LAYOUTS HANDLING
+  =============================== */
+  useEffect(() => {
+    if (isAuthenticated && activeSection === 'layouts') loadLayouts();
+  }, [isAuthenticated, activeSection]);
+
+  const loadLayouts = async () => {
+    const res = await cmsApi.getAllLayouts();
+    if (res.status === 'success') setLayoutsList(res.data || []);
+  };
+
+  const handleToggleLayoutPublic = async (id) => {
+    const res = await cmsApi.toggleLayoutPublic(id);
+    if (res.status === 'success') {
+      NotificationManager.success('✅ Success', 'Layout visibility toggled');
+      loadLayouts();
+    }
+  };
+
+  const handleDeleteLayout = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this layout?')) return;
+    const res = await cmsApi.deleteLayout(id);
+    if (res.status === 'success') {
+      NotificationManager.success('✅ Success', 'Layout deleted');
+      loadLayouts();
+    }
+  };
+
+  /* ===============================
+     ACTIVITY LOGS HANDLING
+  =============================== */
+  useEffect(() => {
+    if (isAuthenticated && activeSection === 'activity') loadActivityLogs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, activeSection, logsLimit]);
+
+  const loadActivityLogs = async () => {
+    const res = await cmsApi.getAllActivityLogs(logsLimit);
+    if (res.status === 'success') setActivityLogs(res.data || []);
+  };
+
+  const handleCleanupLogs = async (days) => {
+    if (!window.confirm(`Delete all activity logs older than ${days} days?`)) return;
+    const res = await cmsApi.cleanupOldLogs(days);
+    if (res.status === 'success') {
+      NotificationManager.success('✅ Success', res.message);
+      loadActivityLogs();
+    }
+  };
 
   /* ===============================
      IMAGE UPLOAD HANDLER
@@ -131,33 +323,28 @@ function AdminDashboard() {
 
     // Validate file size (max 5MB)
     if (file.size > 5 * 1024 * 1024) {
-      setMessage({ text: 'File terlalu besar! Maksimal 5MB', type: 'error' });
+      NotificationManager.error('❌ Error', 'File terlalu besar! Maksimal 5MB');
       return;
     }
 
     // Validate file type
     const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp'];
     if (!validTypes.includes(file.type)) {
-      setMessage({ text: 'Format file tidak valid! Gunakan PNG, JPG, GIF, atau WebP', type: 'error' });
+      NotificationManager.error('❌ Error', 'Format file tidak valid! Gunakan PNG, JPG, GIF, atau WebP');
       return;
     }
 
     setUploadingImage(true);
-    setMessage({ text: 'Mengupload gambar...', type: 'info' });
+    NotificationManager.info('📤 Uploading', 'Mengupload gambar...');
 
-    try {
-      const res = await cmsApi.uploadNewsImage(file);
-      if (res.status === 'success') {
-        setNewArticle({ ...newArticle, image: res.image_url });
-        setMessage({ text: 'Gambar berhasil diupload!', type: 'success' });
-      } else {
-        setMessage({ text: res.message || 'Gagal upload gambar', type: 'error' });
-      }
-    } catch (err) {
-      setMessage({ text: 'Error saat upload gambar', type: 'error' });
-    } finally {
-      setUploadingImage(false);
+    const res = await cmsApi.uploadNewsImage(file);
+    if (res.status === 'success') {
+      setNewArticle({ ...newArticle, image: res.image_url });
+      NotificationManager.success('✅ Success', 'Gambar berhasil diupload!');
+    } else {
+      NotificationManager.error('❌ Error', res.message || 'Gagal upload gambar');
     }
+    setUploadingImage(false);
   };
 
   /* ===============================
@@ -257,6 +444,7 @@ function AdminDashboard() {
   /* ===============================
      INPUT HANDLER
   =============================== */
+  // eslint-disable-next-line no-unused-vars
   const handleInputChange = (path, value) => {
     const newData = { ...editData };
     if (!newData[activeSection]) {
@@ -285,24 +473,35 @@ function AdminDashboard() {
             <div className="form-group">
               <label>Username</label>
               <input
+                id="admin-username"
+                name="username"
                 type="text"
                 value={loginForm.username}
                 onChange={(e) => setLoginForm({ ...loginForm, username: e.target.value })}
                 disabled={loading}
                 required
+                placeholder="Enter username"
               />
             </div>
             <div className="form-group">
               <label>Password</label>
               <input
+                id="admin-password"
+                name="password"
                 type="password"
                 value={loginForm.password}
                 onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
                 disabled={loading}
                 required
+                placeholder="Enter password"
               />
             </div>
-            <button type="submit" className="btn-primary" disabled={loading}>
+            <button 
+              id="admin-login-button"
+              type="submit" 
+              className="btn-primary" 
+              disabled={loading}
+            >
               {loading ? 'Logging in...' : 'Login'}
             </button>
           </form>
@@ -339,7 +538,11 @@ function AdminDashboard() {
             { key: 'contact', label: 'Contact Page' },
             { key: 'faq', label: 'FAQ Management' },
             { key: 'qna', label: 'Q&A Management' },
+            { key: 'messages', label: 'Contact Messages' },
             { key: 'news', label: 'News Management' },
+            { key: 'social', label: 'Social Media Links' },
+            { key: 'layouts', label: 'House Layouts' },
+            { key: 'activity', label: 'Activity Logs' },
             { key: 'theme', label: 'Theme Editor' },
           ].map(({ key, label }) => (
             <li
@@ -358,7 +561,7 @@ function AdminDashboard() {
       <main className="admin-content">
         <div className="content-header">
           <h1>Edit {activeSection === 'homepage' ? 'Home Page Content' : activeSection}</h1>
-          {activeSection !== 'news' && activeSection !== 'qna' && (
+          {activeSection !== 'news' && activeSection !== 'qna' && activeSection !== 'faq' && activeSection !== 'messages' && activeSection !== 'social' && activeSection !== 'layouts' && activeSection !== 'activity' && (
             <button onClick={handleSave} className="btn-primary" disabled={loading}>
               {loading ? 'Saving...' : 'Save Changes'}
             </button>
@@ -629,156 +832,931 @@ function AdminDashboard() {
         {/* ================= ABOUT PAGE ================= */}
         {activeSection === 'about' && currentContent && (
           <>
-            <div className="form-group">
-              <label>Title</label>
-              <input
-                type="text"
-                value={currentContent.title || ''}
-                onChange={(e) => handleInputChange('title', e.target.value)}
-              />
-            </div>
-            <div className="form-group">
-              <label>Content</label>
-              <textarea
-                value={currentContent.content || ''}
-                onChange={(e) => handleInputChange('content', e.target.value)}
-                rows={6}
-              />
-            </div>
+            {/* HERO SECTION */}
+            <section className="admin-section">
+              <h2>Hero Section</h2>
+              <div className="form-group">
+                <label>Label</label>
+                <input
+                  type="text"
+                  value={currentContent.hero?.label || ''}
+                  onChange={(e) => {
+                    const newData = { ...editData };
+                    if (!newData.about) newData.about = JSON.parse(JSON.stringify(content.about));
+                    if (!newData.about.hero) newData.about.hero = {};
+                    newData.about.hero.label = e.target.value;
+                    setEditData(newData);
+                  }}
+                  placeholder="Tentang Kami"
+                />
+              </div>
+              <div className="form-group">
+                <label>Title</label>
+                <input
+                  type="text"
+                  value={currentContent.hero?.title || ''}
+                  onChange={(e) => {
+                    const newData = { ...editData };
+                    if (!newData.about) newData.about = JSON.parse(JSON.stringify(content.about));
+                    if (!newData.about.hero) newData.about.hero = {};
+                    newData.about.hero.title = e.target.value;
+                    setEditData(newData);
+                  }}
+                  placeholder="CV. Virtualign Inova Cipta"
+                />
+              </div>
+              <div className="form-group">
+                <label>Description</label>
+                <textarea
+                  value={currentContent.hero?.description || ''}
+                  onChange={(e) => {
+                    const newData = { ...editData };
+                    if (!newData.about) newData.about = JSON.parse(JSON.stringify(content.about));
+                    if (!newData.about.hero) newData.about.hero = {};
+                    newData.about.hero.description = e.target.value;
+                    setEditData(newData);
+                  }}
+                  rows={4}
+                  placeholder="Perusahaan pengembang teknologi visualisasi digital..."
+                />
+              </div>
+            </section>
+
+            {/* PROFILE SECTION */}
+            <section className="admin-section">
+              <h2>Profile Section</h2>
+              <div className="form-group">
+                <label>Label</label>
+                <input
+                  type="text"
+                  value={currentContent.profile?.label || ''}
+                  onChange={(e) => {
+                    const newData = { ...editData };
+                    if (!newData.about) newData.about = JSON.parse(JSON.stringify(content.about));
+                    if (!newData.about.profile) newData.about.profile = {};
+                    newData.about.profile.label = e.target.value;
+                    setEditData(newData);
+                  }}
+                  placeholder="Profil Perusahaan"
+                />
+              </div>
+              <div className="form-group">
+                <label>Title</label>
+                <input
+                  type="text"
+                  value={currentContent.profile?.title || ''}
+                  onChange={(e) => {
+                    const newData = { ...editData };
+                    if (!newData.about) newData.about = JSON.parse(JSON.stringify(content.about));
+                    if (!newData.about.profile) newData.about.profile = {};
+                    newData.about.profile.title = e.target.value;
+                    setEditData(newData);
+                  }}
+                  placeholder="Solusi Digital Inovatif untuk Masa Depan"
+                />
+              </div>
+              <div className="form-group">
+                <label>Description</label>
+                <textarea
+                  value={currentContent.profile?.description || ''}
+                  onChange={(e) => {
+                    const newData = { ...editData };
+                    if (!newData.about) newData.about = JSON.parse(JSON.stringify(content.about));
+                    if (!newData.about.profile) newData.about.profile = {};
+                    newData.about.profile.description = e.target.value;
+                    setEditData(newData);
+                  }}
+                  rows={4}
+                  placeholder="CV. Virtualign Inova Cipta menyediakan solusi..."
+                />
+              </div>
+            </section>
+
+            {/* VISION SECTION */}
+            <section className="admin-section">
+              <h2>Vision Section</h2>
+              <div className="form-group">
+                <label>Label</label>
+                <input
+                  type="text"
+                  value={currentContent.vision?.label || ''}
+                  onChange={(e) => {
+                    const newData = { ...editData };
+                    if (!newData.about) newData.about = JSON.parse(JSON.stringify(content.about));
+                    if (!newData.about.vision) newData.about.vision = {};
+                    newData.about.vision.label = e.target.value;
+                    setEditData(newData);
+                  }}
+                  placeholder="Visi Kami"
+                />
+              </div>
+              <div className="form-group">
+                <label>Title</label>
+                <input
+                  type="text"
+                  value={currentContent.vision?.title || ''}
+                  onChange={(e) => {
+                    const newData = { ...editData };
+                    if (!newData.about) newData.about = JSON.parse(JSON.stringify(content.about));
+                    if (!newData.about.vision) newData.about.vision = {};
+                    newData.about.vision.title = e.target.value;
+                    setEditData(newData);
+                  }}
+                  placeholder="Memimpin Inovasi Digital"
+                />
+              </div>
+              <div className="form-group">
+                <label>Text</label>
+                <textarea
+                  value={currentContent.vision?.text || ''}
+                  onChange={(e) => {
+                    const newData = { ...editData };
+                    if (!newData.about) newData.about = JSON.parse(JSON.stringify(content.about));
+                    if (!newData.about.vision) newData.about.vision = {};
+                    newData.about.vision.text = e.target.value;
+                    setEditData(newData);
+                  }}
+                  rows={3}
+                  placeholder="Menjadi pemimpin dalam inovasi digital..."
+                />
+              </div>
+            </section>
+
+            {/* MISSION SECTION */}
+            <section className="admin-section">
+              <h2>Mission Section</h2>
+              <div className="form-group">
+                <label>Label</label>
+                <input
+                  type="text"
+                  value={currentContent.mission?.label || ''}
+                  onChange={(e) => {
+                    const newData = { ...editData };
+                    if (!newData.about) newData.about = JSON.parse(JSON.stringify(content.about));
+                    if (!newData.about.mission) newData.about.mission = {};
+                    newData.about.mission.label = e.target.value;
+                    setEditData(newData);
+                  }}
+                  placeholder="Misi Kami"
+                />
+              </div>
+              <div className="form-group">
+                <label>Title</label>
+                <input
+                  type="text"
+                  value={currentContent.mission?.title || ''}
+                  onChange={(e) => {
+                    const newData = { ...editData };
+                    if (!newData.about) newData.about = JSON.parse(JSON.stringify(content.about));
+                    if (!newData.about.mission) newData.about.mission = {};
+                    newData.about.mission.title = e.target.value;
+                    setEditData(newData);
+                  }}
+                  placeholder="Transformasi Digital"
+                />
+              </div>
+              <div className="form-group">
+                <label>Mission Items (One per line)</label>
+                <textarea
+                  value={currentContent.mission?.items?.join('\n') || ''}
+                  onChange={(e) => {
+                    const newData = { ...editData };
+                    if (!newData.about) newData.about = JSON.parse(JSON.stringify(content.about));
+                    if (!newData.about.mission) newData.about.mission = {};
+                    newData.about.mission.items = e.target.value.split('\n').filter(item => item.trim());
+                    setEditData(newData);
+                  }}
+                  rows={8}
+                  placeholder="Mengembangkan teknologi Virtual Tour...&#10;Mendukung pelestarian budaya..."
+                />
+              </div>
+            </section>
+
+            {/* PHILOSOPHY SECTION */}
+            <section className="admin-section">
+              <h2>Philosophy Section</h2>
+              <div className="form-group">
+                <label>Title</label>
+                <input
+                  type="text"
+                  value={currentContent.philosophy?.title || ''}
+                  onChange={(e) => {
+                    const newData = { ...editData };
+                    if (!newData.about) newData.about = JSON.parse(JSON.stringify(content.about));
+                    if (!newData.about.philosophy) newData.about.philosophy = {};
+                    newData.about.philosophy.title = e.target.value;
+                    setEditData(newData);
+                  }}
+                  placeholder="Filosofi Perusahaan"
+                />
+              </div>
+              <div className="form-group">
+                <label>Quote</label>
+                <textarea
+                  value={currentContent.philosophy?.quote || ''}
+                  onChange={(e) => {
+                    const newData = { ...editData };
+                    if (!newData.about) newData.about = JSON.parse(JSON.stringify(content.about));
+                    if (!newData.about.philosophy) newData.about.philosophy = {};
+                    newData.about.philosophy.quote = e.target.value;
+                    setEditData(newData);
+                  }}
+                  rows={3}
+                  placeholder='"Membuka Gerbang ke Dunia Virtual..."'
+                />
+              </div>
+            </section>
+
+            {/* TIMELINE SECTION */}
+            <section className="admin-section">
+              <h2>Timeline Section</h2>
+              <div className="form-group">
+                <label>Label</label>
+                <input
+                  type="text"
+                  value={currentContent.timeline?.label || ''}
+                  onChange={(e) => {
+                    const newData = { ...editData };
+                    if (!newData.about) newData.about = JSON.parse(JSON.stringify(content.about));
+                    if (!newData.about.timeline) newData.about.timeline = {};
+                    newData.about.timeline.label = e.target.value;
+                    setEditData(newData);
+                  }}
+                  placeholder="Perjalanan Kami"
+                />
+              </div>
+              <div className="form-group">
+                <label>Title</label>
+                <input
+                  type="text"
+                  value={currentContent.timeline?.title || ''}
+                  onChange={(e) => {
+                    const newData = { ...editData };
+                    if (!newData.about) newData.about = JSON.parse(JSON.stringify(content.about));
+                    if (!newData.about.timeline) newData.about.timeline = {};
+                    newData.about.timeline.title = e.target.value;
+                    setEditData(newData);
+                  }}
+                  placeholder="Sejarah & Milestone"
+                />
+              </div>
+              <div className="form-group">
+                <label>Timeline Items (Format: YEAR|Event|Description, one per line)</label>
+                <textarea
+                  value={currentContent.timeline?.items?.map(item => `${item.year}|${item.event}|${item.desc}`).join('\n') || ''}
+                  onChange={(e) => {
+                    const newData = { ...editData };
+                    if (!newData.about) newData.about = JSON.parse(JSON.stringify(content.about));
+                    if (!newData.about.timeline) newData.about.timeline = {};
+                    newData.about.timeline.items = e.target.value.split('\n').filter(line => line.trim()).map(line => {
+                      const [year, event, desc] = line.split('|');
+                      return { year: year?.trim() || '', event: event?.trim() || '', desc: desc?.trim() || '' };
+                    });
+                    setEditData(newData);
+                  }}
+                  rows={5}
+                  placeholder="2025|Pendirian perusahaan|Memulai perjalanan inovasi digital"
+                />
+                <small style={{ color: '#888', display: 'block', marginTop: '5px' }}>
+                  Format: Tahun|Nama Event|Deskripsi (pisahkan dengan |)
+                </small>
+              </div>
+            </section>
+
+            {/* VALUES SECTION */}
+            <section className="admin-section">
+              <h2>Values Section</h2>
+              <div className="form-group">
+                <label>Label</label>
+                <input
+                  type="text"
+                  value={currentContent.values?.label || ''}
+                  onChange={(e) => {
+                    const newData = { ...editData };
+                    if (!newData.about) newData.about = JSON.parse(JSON.stringify(content.about));
+                    if (!newData.about.values) newData.about.values = {};
+                    newData.about.values.label = e.target.value;
+                    setEditData(newData);
+                  }}
+                  placeholder="Nilai Kami"
+                />
+              </div>
+              <div className="form-group">
+                <label>Title</label>
+                <input
+                  type="text"
+                  value={currentContent.values?.title || ''}
+                  onChange={(e) => {
+                    const newData = { ...editData };
+                    if (!newData.about) newData.about = JSON.parse(JSON.stringify(content.about));
+                    if (!newData.about.values) newData.about.values = {};
+                    newData.about.values.title = e.target.value;
+                    setEditData(newData);
+                  }}
+                  placeholder="Prinsip yang Kami Pegang"
+                />
+              </div>
+              <div className="form-group">
+                <label>Value Items (Format: Title|Description, one per line)</label>
+                <textarea
+                  value={currentContent.values?.items?.map(item => `${item.title}|${item.desc}`).join('\n') || ''}
+                  onChange={(e) => {
+                    const newData = { ...editData };
+                    if (!newData.about) newData.about = JSON.parse(JSON.stringify(content.about));
+                    if (!newData.about.values) newData.about.values = {};
+                    newData.about.values.items = e.target.value.split('\n').filter(line => line.trim()).map(line => {
+                      const [title, desc] = line.split('|');
+                      return { title: title?.trim() || '', desc: desc?.trim() || '' };
+                    });
+                    setEditData(newData);
+                  }}
+                  rows={8}
+                  placeholder="Inovasi|Terus mengembangkan teknologi baru&#10;Kreativitas|Memadukan seni dan teknologi"
+                />
+                <small style={{ color: '#888', display: 'block', marginTop: '5px' }}>
+                  Format: Judul Nilai|Deskripsi (pisahkan dengan |)
+                </small>
+              </div>
+            </section>
+
+            {/* SERVICES SECTION */}
+            <section className="admin-section">
+              <h2>Services Section</h2>
+              <div className="form-group">
+                <label>Label</label>
+                <input
+                  type="text"
+                  value={currentContent.services?.label || ''}
+                  onChange={(e) => {
+                    const newData = { ...editData };
+                    if (!newData.about) newData.about = JSON.parse(JSON.stringify(content.about));
+                    if (!newData.about.services) newData.about.services = {};
+                    newData.about.services.label = e.target.value;
+                    setEditData(newData);
+                  }}
+                  placeholder="Layanan Kami"
+                />
+              </div>
+              <div className="form-group">
+                <label>Title</label>
+                <input
+                  type="text"
+                  value={currentContent.services?.title || ''}
+                  onChange={(e) => {
+                    const newData = { ...editData };
+                    if (!newData.about) newData.about = JSON.parse(JSON.stringify(content.about));
+                    if (!newData.about.services) newData.about.services = {};
+                    newData.about.services.title = e.target.value;
+                    setEditData(newData);
+                  }}
+                  placeholder="Solusi Digital Terbaik"
+                />
+              </div>
+              <div className="form-group">
+                <label>Service Items (Format: Title|Description, one per line)</label>
+                <textarea
+                  value={currentContent.services?.items?.map(item => `${item.title}|${item.desc}`).join('\n') || ''}
+                  onChange={(e) => {
+                    const newData = { ...editData };
+                    if (!newData.about) newData.about = JSON.parse(JSON.stringify(content.about));
+                    if (!newData.about.services) newData.about.services = {};
+                    newData.about.services.items = e.target.value.split('\n').filter(line => line.trim()).map(line => {
+                      const [title, desc] = line.split('|');
+                      return { title: title?.trim() || '', desc: desc?.trim() || '' };
+                    });
+                    setEditData(newData);
+                  }}
+                  rows={6}
+                  placeholder="Virtual Tour Interaktif|Pengalaman imersif untuk museum dan galeri&#10;Galeri Virtual|Platform pamer dan penjualan lukisan online"
+                />
+                <small style={{ color: '#888', display: 'block', marginTop: '5px' }}>
+                  Format: Nama Layanan|Deskripsi (pisahkan dengan |)
+                </small>
+              </div>
+            </section>
+
+            {/* ADVANTAGES SECTION */}
+            <section className="admin-section">
+              <h2>Advantages Section</h2>
+              <div className="form-group">
+                <label>Label</label>
+                <input
+                  type="text"
+                  value={currentContent.advantages?.label || ''}
+                  onChange={(e) => {
+                    const newData = { ...editData };
+                    if (!newData.about) newData.about = JSON.parse(JSON.stringify(content.about));
+                    if (!newData.about.advantages) newData.about.advantages = {};
+                    newData.about.advantages.label = e.target.value;
+                    setEditData(newData);
+                  }}
+                  placeholder="Keunggulan"
+                />
+              </div>
+              <div className="form-group">
+                <label>Title</label>
+                <input
+                  type="text"
+                  value={currentContent.advantages?.title || ''}
+                  onChange={(e) => {
+                    const newData = { ...editData };
+                    if (!newData.about) newData.about = JSON.parse(JSON.stringify(content.about));
+                    if (!newData.about.advantages) newData.about.advantages = {};
+                    newData.about.advantages.title = e.target.value;
+                    setEditData(newData);
+                  }}
+                  placeholder="Mengapa Memilih Kami?"
+                />
+              </div>
+              <div className="form-group">
+                <label>Description</label>
+                <textarea
+                  value={currentContent.advantages?.description || ''}
+                  onChange={(e) => {
+                    const newData = { ...editData };
+                    if (!newData.about) newData.about = JSON.parse(JSON.stringify(content.about));
+                    if (!newData.about.advantages) newData.about.advantages = {};
+                    newData.about.advantages.description = e.target.value;
+                    setEditData(newData);
+                  }}
+                  rows={2}
+                  placeholder="Kami menawarkan kombinasi sempurna antara teknologi terdepan dan layanan profesional"
+                />
+              </div>
+              <div className="form-group">
+                <label>Advantage Items (One per line)</label>
+                <textarea
+                  value={currentContent.advantages?.items?.join('\n') || ''}
+                  onChange={(e) => {
+                    const newData = { ...editData };
+                    if (!newData.about) newData.about = JSON.parse(JSON.stringify(content.about));
+                    if (!newData.about.advantages) newData.about.advantages = {};
+                    newData.about.advantages.items = e.target.value.split('\n').filter(item => item.trim());
+                    setEditData(newData);
+                  }}
+                  rows={5}
+                  placeholder="Teknologi mutakhir (VR, 360°, AR, AI)&#10;Kualitas visual dan pengalaman interaktif terbaik"
+                />
+              </div>
+            </section>
+
+            {/* TARGET MARKET SECTION */}
+            <section className="admin-section">
+              <h2>Target Market Section</h2>
+              <div className="form-group">
+                <label>Label</label>
+                <input
+                  type="text"
+                  value={currentContent.targetMarket?.label || ''}
+                  onChange={(e) => {
+                    const newData = { ...editData };
+                    if (!newData.about) newData.about = JSON.parse(JSON.stringify(content.about));
+                    if (!newData.about.targetMarket) newData.about.targetMarket = {};
+                    newData.about.targetMarket.label = e.target.value;
+                    setEditData(newData);
+                  }}
+                  placeholder="Target Pasar"
+                />
+              </div>
+              <div className="form-group">
+                <label>Title</label>
+                <input
+                  type="text"
+                  value={currentContent.targetMarket?.title || ''}
+                  onChange={(e) => {
+                    const newData = { ...editData };
+                    if (!newData.about) newData.about = JSON.parse(JSON.stringify(content.about));
+                    if (!newData.about.targetMarket) newData.about.targetMarket = {};
+                    newData.about.targetMarket.title = e.target.value;
+                    setEditData(newData);
+                  }}
+                  placeholder="Klien Potensial Kami"
+                />
+              </div>
+              <div className="form-group">
+                <label>Target Market Items (One per line)</label>
+                <textarea
+                  value={currentContent.targetMarket?.items?.join('\n') || ''}
+                  onChange={(e) => {
+                    const newData = { ...editData };
+                    if (!newData.about) newData.about = JSON.parse(JSON.stringify(content.about));
+                    if (!newData.about.targetMarket) newData.about.targetMarket = {};
+                    newData.about.targetMarket.items = e.target.value.split('\n').filter(item => item.trim());
+                    setEditData(newData);
+                  }}
+                  rows={6}
+                  placeholder="Galeri seni dan kolektor lukisan&#10;Agen properti dan pengembang real estate"
+                />
+              </div>
+            </section>
           </>
         )}
 
         {/* ================= CONTACT PAGE ================= */}
         {activeSection === 'contact' && currentContent && (
           <>
-            <div className="form-group">
-              <label>Title</label>
-              <input
-                type="text"
-                value={currentContent.title || ''}
-                onChange={(e) => handleInputChange('title', e.target.value)}
-              />
+            {/* INFO BOX */}
+            <div style={{
+              background: 'rgba(255,255,255,0.05)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              borderRadius: '8px',
+              padding: '1rem 1.5rem',
+              marginBottom: '2rem'
+            }}>
+              <h3 style={{ margin: '0 0 0.5rem 0', color: '#ffffff', fontSize: '1rem' }}>ℹ️ Contact Page Information</h3>
+              <p style={{ margin: '0.5rem 0', color: '#999', fontSize: '0.9rem', lineHeight: '1.6' }}>
+                <strong>Note:</strong> This section manages the display text and static information on the Contact page.
+              </p>
+              <ul style={{ margin: '0.5rem 0 0 0', paddingLeft: '1.5rem', color: '#999', fontSize: '0.9rem', lineHeight: '1.8' }}>
+                <li><strong>Social Media Links</strong> → Managed in "Social Media Links" section (below)</li>
+                <li><strong>Contact Messages</strong> → View submissions in "Contact Messages" section (below)</li>
+              </ul>
             </div>
-            <div className="form-group">
-              <label>Description</label>
-              <textarea
-                value={currentContent.description || ''}
-                onChange={(e) => handleInputChange('description', e.target.value)}
-                rows={3}
-              />
+
+            {/* HERO SECTION */}
+            <section className="admin-section">
+              <h2>Hero Section</h2>
+              <div className="form-group">
+                <label>Label (Small Text)</label>
+                <input
+                  type="text"
+                  value={currentContent.hero?.label || ''}
+                  onChange={(e) => {
+                    const newData = { ...editData };
+                    if (!newData.contact) newData.contact = JSON.parse(JSON.stringify(content.contact));
+                    if (!newData.contact.hero) newData.contact.hero = {};
+                    newData.contact.hero.label = e.target.value;
+                    setEditData(newData);
+                  }}
+                  placeholder="Hubungi Kami"
+                />
+              </div>
+              <div className="form-group">
+                <label>Main Title</label>
+                <input
+                  type="text"
+                  value={currentContent.hero?.title || ''}
+                  onChange={(e) => {
+                    const newData = { ...editData };
+                    if (!newData.contact) newData.contact = JSON.parse(JSON.stringify(content.contact));
+                    if (!newData.contact.hero) newData.contact.hero = {};
+                    newData.contact.hero.title = e.target.value;
+                    setEditData(newData);
+                  }}
+                  placeholder="Contact Us"
+                />
+              </div>
+              <div className="form-group">
+                <label>Subtitle</label>
+                <textarea
+                  value={currentContent.hero?.subtitle || ''}
+                  onChange={(e) => {
+                    const newData = { ...editData };
+                    if (!newData.contact) newData.contact = JSON.parse(JSON.stringify(content.contact));
+                    if (!newData.contact.hero) newData.contact.hero = {};
+                    newData.contact.hero.subtitle = e.target.value;
+                    setEditData(newData);
+                  }}
+                  rows={2}
+                  placeholder="Hubungi kami untuk pertanyaan..."
+                />
+              </div>
+            </section>
+
+            {/* GET IN TOUCH SECTION */}
+            <section className="admin-section">
+              <h2>Get In Touch Info</h2>
+              <div className="form-group">
+                <label>Title</label>
+                <input
+                  type="text"
+                  value={currentContent.info?.title || ''}
+                  onChange={(e) => {
+                    const newData = { ...editData };
+                    if (!newData.contact) newData.contact = JSON.parse(JSON.stringify(content.contact));
+                    if (!newData.contact.info) newData.contact.info = {};
+                    newData.contact.info.title = e.target.value;
+                    setEditData(newData);
+                  }}
+                  placeholder="Get In Touch"
+                />
+              </div>
+              <div className="form-group">
+                <label>Description</label>
+                <textarea
+                  value={currentContent.info?.description || ''}
+                  onChange={(e) => {
+                    const newData = { ...editData };
+                    if (!newData.contact) newData.contact = JSON.parse(JSON.stringify(content.contact));
+                    if (!newData.contact.info) newData.contact.info = {};
+                    newData.contact.info.description = e.target.value;
+                    setEditData(newData);
+                  }}
+                  rows={3}
+                  placeholder="Kami siap membantu..."
+                />
+              </div>
+            </section>
+
+            {/* ADDRESS SECTION */}
+            <section className="admin-section">
+              <h2>Address Information</h2>
+              <div className="form-group">
+                <label>Section Title</label>
+                <input
+                  type="text"
+                  value={currentContent.address?.title || ''}
+                  onChange={(e) => {
+                    const newData = { ...editData };
+                    if (!newData.contact) newData.contact = JSON.parse(JSON.stringify(content.contact));
+                    if (!newData.contact.address) newData.contact.address = {};
+                    newData.contact.address.title = e.target.value;
+                    setEditData(newData);
+                  }}
+                  placeholder="Address"
+                />
+              </div>
+              <div className="form-group">
+                <label>Address Content (Use \n for new line)</label>
+                <textarea
+                  value={currentContent.address?.content || ''}
+                  onChange={(e) => {
+                    const newData = { ...editData };
+                    if (!newData.contact) newData.contact = JSON.parse(JSON.stringify(content.contact));
+                    if (!newData.contact.address) newData.contact.address = {};
+                    newData.contact.address.content = e.target.value;
+                    setEditData(newData);
+                  }}
+                  rows={3}
+                  placeholder="Jl. Example Street No. 123&#10;Jakarta, Indonesia 12345"
+                />
+              </div>
+            </section>
+
+            {/* EMAIL SECTION */}
+            <section className="admin-section">
+              <h2>Email Information</h2>
+              <div className="form-group">
+                <label>Section Title</label>
+                <input
+                  type="text"
+                  value={currentContent.email?.title || ''}
+                  onChange={(e) => {
+                    const newData = { ...editData };
+                    if (!newData.contact) newData.contact = JSON.parse(JSON.stringify(content.contact));
+                    if (!newData.contact.email) newData.contact.email = {};
+                    newData.contact.email.title = e.target.value;
+                    setEditData(newData);
+                  }}
+                  placeholder="Email"
+                />
+              </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Primary Email</label>
+                  <input
+                    type="email"
+                    value={currentContent.email?.primary || ''}
+                    onChange={(e) => {
+                      const newData = { ...editData };
+                      if (!newData.contact) newData.contact = JSON.parse(JSON.stringify(content.contact));
+                      if (!newData.contact.email) newData.contact.email = {};
+                      newData.contact.email.primary = e.target.value;
+                      setEditData(newData);
+                    }}
+                    placeholder="info@virtualign.com"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Secondary Email</label>
+                  <input
+                    type="email"
+                    value={currentContent.email?.secondary || ''}
+                    onChange={(e) => {
+                      const newData = { ...editData };
+                      if (!newData.contact) newData.contact = JSON.parse(JSON.stringify(content.contact));
+                      if (!newData.contact.email) newData.contact.email = {};
+                      newData.contact.email.secondary = e.target.value;
+                      setEditData(newData);
+                    }}
+                    placeholder="support@virtualign.com"
+                  />
+                </div>
+              </div>
+            </section>
+
+            {/* PHONE SECTION */}
+            <section className="admin-section">
+              <h2>Phone Information</h2>
+              <div className="form-group">
+                <label>Section Title</label>
+                <input
+                  type="text"
+                  value={currentContent.phone?.title || ''}
+                  onChange={(e) => {
+                    const newData = { ...editData };
+                    if (!newData.contact) newData.contact = JSON.parse(JSON.stringify(content.contact));
+                    if (!newData.contact.phone) newData.contact.phone = {};
+                    newData.contact.phone.title = e.target.value;
+                    setEditData(newData);
+                  }}
+                  placeholder="Phone"
+                />
+              </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Primary Phone</label>
+                  <input
+                    type="tel"
+                    value={currentContent.phone?.primary || ''}
+                    onChange={(e) => {
+                      const newData = { ...editData };
+                      if (!newData.contact) newData.contact = JSON.parse(JSON.stringify(content.contact));
+                      if (!newData.contact.phone) newData.contact.phone = {};
+                      newData.contact.phone.primary = e.target.value;
+                      setEditData(newData);
+                    }}
+                    placeholder="+62 812-3456-7890"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Secondary Phone</label>
+                  <input
+                    type="tel"
+                    value={currentContent.phone?.secondary || ''}
+                    onChange={(e) => {
+                      const newData = { ...editData };
+                      if (!newData.contact) newData.contact = JSON.parse(JSON.stringify(content.contact));
+                      if (!newData.contact.phone) newData.contact.phone = {};
+                      newData.contact.phone.secondary = e.target.value;
+                      setEditData(newData);
+                    }}
+                    placeholder="+62 812-3456-7891"
+                  />
+                </div>
+              </div>
+            </section>
+
+            {/* WORKING HOURS SECTION */}
+            <section className="admin-section">
+              <h2>Working Hours</h2>
+              <div className="form-group">
+                <label>Section Title</label>
+                <input
+                  type="text"
+                  value={currentContent.hours?.title || ''}
+                  onChange={(e) => {
+                    const newData = { ...editData };
+                    if (!newData.contact) newData.contact = JSON.parse(JSON.stringify(content.contact));
+                    if (!newData.contact.hours) newData.contact.hours = {};
+                    newData.contact.hours.title = e.target.value;
+                    setEditData(newData);
+                  }}
+                  placeholder="Working Hours"
+                />
+              </div>
+              <div className="form-group">
+                <label>Weekday Hours</label>
+                <input
+                  type="text"
+                  value={currentContent.hours?.weekday || ''}
+                  onChange={(e) => {
+                    const newData = { ...editData };
+                    if (!newData.contact) newData.contact = JSON.parse(JSON.stringify(content.contact));
+                    if (!newData.contact.hours) newData.contact.hours = {};
+                    newData.contact.hours.weekday = e.target.value;
+                    setEditData(newData);
+                  }}
+                  placeholder="Senin - Jumat: 09:00 - 18:00"
+                />
+              </div>
+              <div className="form-group">
+                <label>Saturday Hours</label>
+                <input
+                  type="text"
+                  value={currentContent.hours?.saturday || ''}
+                  onChange={(e) => {
+                    const newData = { ...editData };
+                    if (!newData.contact) newData.contact = JSON.parse(JSON.stringify(content.contact));
+                    if (!newData.contact.hours) newData.contact.hours = {};
+                    newData.contact.hours.saturday = e.target.value;
+                    setEditData(newData);
+                  }}
+                  placeholder="Sabtu: 09:00 - 15:00"
+                />
+              </div>
+              <div className="form-group">
+                <label>Sunday Status</label>
+                <input
+                  type="text"
+                  value={currentContent.hours?.sunday || ''}
+                  onChange={(e) => {
+                    const newData = { ...editData };
+                    if (!newData.contact) newData.contact = JSON.parse(JSON.stringify(content.contact));
+                    if (!newData.contact.hours) newData.contact.hours = {};
+                    newData.contact.hours.sunday = e.target.value;
+                    setEditData(newData);
+                  }}
+                  placeholder="Minggu: Tutup"
+                />
+              </div>
+            </section>
+
+            {/* SOCIAL MEDIA - NOW MANAGED SEPARATELY */}
+            <div style={{
+              background: 'rgba(100,180,255,0.1)',
+              border: '1px solid rgba(100,180,255,0.3)',
+              borderRadius: '8px',
+              padding: '1rem 1.5rem',
+              marginBottom: '1.5rem'
+            }}>
+              <h3 style={{ margin: '0 0 0.5rem 0', color: '#64b4ff', fontSize: '1rem' }}>
+                🔗 Social Media Links
+              </h3>
+              <p style={{ margin: '0', color: '#aaa', fontSize: '0.9rem' }}>
+                Social media links are now managed in a dedicated section below. 
+                Go to <strong style={{ color: '#fff' }}>"Social Media Links"</strong> in the menu to add, edit, or delete social media platforms.
+              </p>
             </div>
-            <div className="form-group">
-              <label>Email</label>
-              <input
-                type="email"
-                value={currentContent.email || ''}
-                onChange={(e) => handleInputChange('email', e.target.value)}
-              />
-            </div>
-            <div className="form-group">
-              <label>Phone</label>
-              <input
-                type="text"
-                value={currentContent.phone || ''}
-                onChange={(e) => handleInputChange('phone', e.target.value)}
-              />
-            </div>
-            <div className="form-group">
-              <label>Address</label>
-              <textarea
-                value={currentContent.address || ''}
-                onChange={(e) => handleInputChange('address', e.target.value)}
-                rows={2}
-              />
-            </div>
+
+            {/* CONTACT FORM SECTION */}
+            <section className="admin-section">
+              <h2>Contact Form Text</h2>
+              <div className="form-group">
+                <label>Form Title</label>
+                <input
+                  type="text"
+                  value={currentContent.form?.title || ''}
+                  onChange={(e) => {
+                    const newData = { ...editData };
+                    if (!newData.contact) newData.contact = JSON.parse(JSON.stringify(content.contact));
+                    if (!newData.contact.form) newData.contact.form = {};
+                    newData.contact.form.title = e.target.value;
+                    setEditData(newData);
+                  }}
+                  placeholder="Send Us a Message"
+                />
+              </div>
+              <div className="form-group">
+                <label>Form Subtitle</label>
+                <textarea
+                  value={currentContent.form?.subtitle || ''}
+                  onChange={(e) => {
+                    const newData = { ...editData };
+                    if (!newData.contact) newData.contact = JSON.parse(JSON.stringify(content.contact));
+                    if (!newData.contact.form) newData.contact.form = {};
+                    newData.contact.form.subtitle = e.target.value;
+                    setEditData(newData);
+                  }}
+                  rows={2}
+                  placeholder="Isi form di bawah..."
+                />
+              </div>
+            </section>
+
+            {/* MAP SECTION */}
+            <section className="admin-section">
+              <h2>Google Maps Embed</h2>
+              <div className="form-group">
+                <label>Map Section Title</label>
+                <input
+                  type="text"
+                  value={currentContent.map?.title || ''}
+                  onChange={(e) => {
+                    const newData = { ...editData };
+                    if (!newData.contact) newData.contact = JSON.parse(JSON.stringify(content.contact));
+                    if (!newData.contact.map) newData.contact.map = {};
+                    newData.contact.map.title = e.target.value;
+                    setEditData(newData);
+                  }}
+                  placeholder="Our Location"
+                />
+              </div>
+              <div className="form-group">
+                <label>Google Maps Embed URL</label>
+                <textarea
+                  value={currentContent.map?.embedUrl || ''}
+                  onChange={(e) => {
+                    const newData = { ...editData };
+                    if (!newData.contact) newData.contact = JSON.parse(JSON.stringify(content.contact));
+                    if (!newData.contact.map) newData.contact.map = {};
+                    newData.contact.map.embedUrl = e.target.value;
+                    setEditData(newData);
+                  }}
+                  rows={3}
+                  placeholder="https://www.google.com/maps/embed?pb=..."
+                />
+                <small style={{ color: '#999', display: 'block', marginTop: '0.5rem' }}>
+                  Get embed URL from Google Maps → Share → Embed a map → Copy HTML (only the src URL)
+                </small>
+              </div>
+            </section>
           </>
         )}
 
         {/* ================= FAQ SECTION ================= */}
-        {activeSection === 'faq' && (
-          <>
-            <div className="form-group">
-              <label>Title</label>
-              <input
-                type="text"
-                value={currentContent.title || ''}
-                onChange={(e) => handleInputChange('title', e.target.value)}
-              />
-            </div>
-            <div className="form-group">
-              <label>Subtitle</label>
-              <textarea
-                value={currentContent.subtitle || ''}
-                onChange={(e) => handleInputChange('subtitle', e.target.value)}
-                rows={2}
-              />
-            </div>
-
-            <h3>FAQ Questions</h3>
-            {currentContent.questions && currentContent.questions.length > 0 ? (
-              currentContent.questions.map((item, index) => (
-                    <div key={item.id || index} className="faq-editor-item">
-                      <div className="form-group">
-                        <label>Question {index + 1}</label>
-                        <input
-                          type="text"
-                          value={item.question || ''}
-                          onChange={(e) => {
-                            const newQuestions = [...currentContent.questions];
-                            newQuestions[index].question = e.target.value;
-                            handleInputChange('questions', newQuestions);
-                          }}
-                        />
-                      </div>
-                      <div className="form-group">
-                        <label>Answer {index + 1}</label>
-                        <textarea
-                          value={item.answer || ''}
-                          onChange={(e) => {
-                            const newQuestions = [...currentContent.questions];
-                            newQuestions[index].answer = e.target.value;
-                            handleInputChange('questions', newQuestions);
-                          }}
-                          rows={3}
-                        />
-                      </div>
-                      <button
-                        className="btn-danger"
-                        onClick={() => {
-                          const newQuestions = currentContent.questions.filter((_, i) => i !== index);
-                          handleInputChange('questions', newQuestions);
-                        }}
-                      >
-                        Delete Question
-                      </button>
-                    </div>
-                  ))
-                ) : (
-                  <div className="empty-message">
-                    <p>No FAQ questions yet. Click "Add New Question" to create one.</p>
-                  </div>
-                )}
-
-                <button
-                  className="btn-secondary"
-                  onClick={() => {
-                    const newQuestions = [...(currentContent.questions || [])];
-                    const newId = newQuestions.length > 0 
-                      ? Math.max(...newQuestions.map(q => q.id || 0)) + 1 
-                      : 1;
-                    newQuestions.push({
-                      id: newId,
-                      question: 'Pertanyaan baru',
-                      answer: 'Jawaban baru'
-                    });
-                    handleInputChange('questions', newQuestions);
-                  }}
-                >
-                  Add New Question
-                </button>
-          </>
-        )}
-
+        {/* FAQ dikelola melalui FAQ Management, bukan CMS content */}
+        
         {/* ================= NEWS SECTION ================= */}
         {activeSection === 'news' && (
           <section className="news-editor">
@@ -864,16 +1842,16 @@ function AdminDashboard() {
               className="btn-primary"
               onClick={async () => {
                 if (!newArticle.title) {
-                  setMessage({ text: 'Title wajib diisi!', type: 'error' });
+                  NotificationManager.warning('⚠️ Incomplete', 'Title wajib diisi!');
                   return;
                 }
                 const res = await cmsApi.createNews(newArticle);
                 if (res.status === 'success') {
-                  setMessage({ text: 'News created successfully', type: 'success' });
+                  NotificationManager.success('✅ Success', 'News created successfully');
                   setNewArticle({ title: '', excerpt: '', content: '', image: '', category: 'General', author: 'Admin' });
                   loadNews();
                 } else {
-                  setMessage({ text: 'Failed to create news', type: 'error' });
+                  NotificationManager.error('❌ Error', res.message || 'Failed to create news');
                 }
               }}
               disabled={uploadingImage}
@@ -896,8 +1874,10 @@ function AdminDashboard() {
                           title: `${n.title} (Edited)`,
                         });
                         if (res.status === 'success') {
-                          setMessage({ text: 'News updated successfully', type: 'success' });
+                          NotificationManager.success('✅ Success', 'News updated successfully');
                           loadNews();
+                        } else {
+                          NotificationManager.error('❌ Error', res.message || 'Failed to update news');
                         }
                       }}
                     >
@@ -906,10 +1886,13 @@ function AdminDashboard() {
                     <button
                       className="btn-danger"
                       onClick={async () => {
+                        if (!window.confirm('Are you sure you want to delete this news?')) return;
                         const res = await cmsApi.deleteNews(n.id);
                         if (res.status === 'success') {
-                          setMessage({ text: 'News deleted successfully', type: 'success' });
+                          NotificationManager.success('✅ Success', 'News deleted successfully');
                           loadNews();
+                        } else {
+                          NotificationManager.error('❌ Error', res.message || 'Failed to delete news');
                         }
                       }}
                     >
@@ -920,6 +1903,761 @@ function AdminDashboard() {
               ))}
             </ul>
           </section>
+        )}
+
+        {/* ==================== FAQ MANAGEMENT SECTION ==================== */}
+        {activeSection === 'faq' && (
+          <>
+            <div className="faq-header">
+              <h2>FAQ Management</h2>
+              <div className="faq-summary">
+                <span className="badge badge-total">Total: {faqList.length}</span>
+                <span className="badge badge-active">
+                  Active: {faqList.filter(f => f.is_active === 1).length}
+                </span>
+                <span className="badge badge-inactive">
+                  Inactive: {faqList.filter(f => f.is_active === 0).length}
+                </span>
+              </div>
+            </div>
+
+            {/* CREATE NEW FAQ FORM */}
+            <div className="faq-create-form">
+              <h3>Add New FAQ</h3>
+              
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Category</label>
+                  <select
+                    value={newFaq.category}
+                    onChange={(e) => setNewFaq({ ...newFaq, category: e.target.value })}
+                  >
+                    <option value="Umum">Umum</option>
+                    <option value="Fitur">Fitur</option>
+                    <option value="Penggunaan">Penggunaan</option>
+                    <option value="Teknis">Teknis</option>
+                    <option value="Export & Sharing">Export & Sharing</option>
+                    <option value="Virtual Tour">Virtual Tour</option>
+                    <option value="Support">Support</option>
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label>Display Order</label>
+                  <input
+                    type="number"
+                    value={newFaq.display_order}
+                    onChange={(e) => setNewFaq({ ...newFaq, display_order: parseInt(e.target.value) || 0 })}
+                    placeholder="0"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Status</label>
+                  <select
+                    value={newFaq.is_active}
+                    onChange={(e) => setNewFaq({ ...newFaq, is_active: parseInt(e.target.value) })}
+                  >
+                    <option value={1}>Active</option>
+                    <option value={0}>Inactive</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label>Question *</label>
+                <input
+                  type="text"
+                  value={newFaq.question}
+                  onChange={(e) => setNewFaq({ ...newFaq, question: e.target.value })}
+                  placeholder="Enter the question..."
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Answer *</label>
+                <textarea
+                  value={newFaq.answer}
+                  onChange={(e) => setNewFaq({ ...newFaq, answer: e.target.value })}
+                  placeholder="Enter the answer..."
+                  rows="4"
+                />
+              </div>
+
+              <button className="btn-primary" onClick={handleCreateFaq}>
+                Add FAQ
+              </button>
+            </div>
+
+            {/* FAQ LIST */}
+            <div className="faq-list-section">
+              <h3>Existing FAQs</h3>
+              
+              {faqList.length === 0 ? (
+                <div className="empty-state">
+                  <p>No FAQs found. Create your first FAQ above!</p>
+                </div>
+              ) : (
+                <div className="faq-table-wrapper">
+                  <table className="faq-table">
+                    <thead>
+                      <tr>
+                        <th>Category</th>
+                        <th>Question</th>
+                        <th>Answer</th>
+                        <th>Order</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {faqList.map((faq) => (
+                        editingFaq?.id === faq.id ? (
+                          // EDIT MODE
+                          <tr key={faq.id} className="editing-row">
+                            <td>
+                              <select
+                                value={editingFaq.category}
+                                onChange={(e) => setEditingFaq({ ...editingFaq, category: e.target.value })}
+                              >
+                                <option value="Umum">Umum</option>
+                                <option value="Fitur">Fitur</option>
+                                <option value="Penggunaan">Penggunaan</option>
+                                <option value="Teknis">Teknis</option>
+                                <option value="Export & Sharing">Export & Sharing</option>
+                                <option value="Virtual Tour">Virtual Tour</option>
+                                <option value="Support">Support</option>
+                              </select>
+                            </td>
+                            <td>
+                              <textarea
+                                value={editingFaq.question}
+                                onChange={(e) => setEditingFaq({ ...editingFaq, question: e.target.value })}
+                                rows="2"
+                              />
+                            </td>
+                            <td>
+                              <textarea
+                                value={editingFaq.answer}
+                                onChange={(e) => setEditingFaq({ ...editingFaq, answer: e.target.value })}
+                                rows="3"
+                              />
+                            </td>
+                            <td>
+                              <input
+                                type="number"
+                                value={editingFaq.display_order}
+                                onChange={(e) => setEditingFaq({ ...editingFaq, display_order: parseInt(e.target.value) || 0 })}
+                                style={{ width: '60px' }}
+                              />
+                            </td>
+                            <td>
+                              <select
+                                value={editingFaq.is_active}
+                                onChange={(e) => setEditingFaq({ ...editingFaq, is_active: parseInt(e.target.value) })}
+                              >
+                                <option value={1}>Active</option>
+                                <option value={0}>Inactive</option>
+                              </select>
+                            </td>
+                            <td>
+                              <div className="action-buttons">
+                                <button
+                                  className="btn-save"
+                                  onClick={() => handleUpdateFaq(faq.id, editingFaq)}
+                                  title="Save changes"
+                                >
+                                  Save
+                                </button>
+                                <button
+                                  className="btn-cancel"
+                                  onClick={() => setEditingFaq(null)}
+                                  title="Cancel edit"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ) : (
+                          // VIEW MODE
+                          <tr key={faq.id}>
+                            <td>
+                              <span className="category-badge">{faq.category}</span>
+                            </td>
+                            <td>
+                              <div className="faq-question">{faq.question}</div>
+                            </td>
+                            <td>
+                              <div className="faq-answer">{faq.answer}</div>
+                            </td>
+                            <td className="text-center">
+                              {faq.display_order}
+                            </td>
+                            <td>
+                              <span className={`status-badge ${faq.is_active === 1 ? 'active' : 'inactive'}`}>
+                                {faq.is_active === 1 ? 'Active' : 'Inactive'}
+                              </span>
+                            </td>
+                            <td>
+                              <div className="action-buttons">
+                                <button
+                                  className="btn-edit"
+                                  onClick={() => setEditingFaq({...faq})}
+                                  title="Edit FAQ"
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  className="btn-delete"
+                                  onClick={() => handleDeleteFaq(faq.id)}
+                                  title="Delete FAQ"
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* ================= CONTACT MESSAGES SECTION ================= */}
+        {activeSection === 'messages' && (
+          <>
+            <div className="admin-section">
+              <div className="faq-header">
+                <h2>Contact Messages</h2>
+                <div className="faq-summary">
+                  <span className="badge badge-total">Total: {contactMessages.length}</span>
+                  <span className="badge badge-active">New: {contactMessages.filter(m => m.status === 'new').length}</span>
+                  <span className="badge badge-inactive">Read: {contactMessages.filter(m => m.status === 'read').length}</span>
+                </div>
+              </div>
+
+              <div className="form-group" style={{marginBottom: '2rem'}}>
+                <label>Filter Messages</label>
+                <select value={messageFilter} onChange={(e) => setMessageFilter(e.target.value)}>
+                  <option value="all">All Messages</option>
+                  <option value="new">New Only</option>
+                  <option value="read">Read Only</option>
+                </select>
+              </div>
+
+              {filteredMessages.length === 0 ? (
+                <p className="empty-state">No messages found</p>
+              ) : (
+                <div className="faq-table-wrapper">
+                  <table className="faq-table">
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Email / Phone</th>
+                        <th>Subject</th>
+                        <th>Message</th>
+                        <th>Date</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredMessages.map(msg => (
+                        <tr key={msg.id}>
+                          <td><strong>{msg.name}</strong></td>
+                          <td>
+                            <div>{msg.email}</div>
+                            {msg.phone && <div style={{fontSize: '0.85rem', opacity: 0.7}}>{msg.phone}</div>}
+                          </td>
+                          <td>{msg.subject || '-'}</td>
+                          <td style={{maxWidth: '300px'}}>
+                            <div style={{
+                              maxHeight: '60px',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis'
+                            }}>
+                              {msg.message}
+                            </div>
+                          </td>
+                          <td>{new Date(msg.created_at).toLocaleDateString()}</td>
+                          <td>
+                            <span className={`status-badge ${msg.status}`}>
+                              {msg.status}
+                            </span>
+                          </td>
+                          <td>
+                            <div className="action-buttons">
+                              {msg.status === 'new' && (
+                                <button
+                                  className="btn-edit"
+                                  onClick={() => handleMarkAsRead(msg.id)}
+                                >
+                                  Mark Read
+                                </button>
+                              )}
+                              <button
+                                className="btn-delete"
+                                onClick={() => handleDeleteMessage(msg.id)}
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* ================= SOCIAL MEDIA SECTION ================= */}
+        {activeSection === 'social' && (
+          <>
+            <div className="admin-section">
+              <div className="faq-header">
+                <h2>Social Media Links</h2>
+                <div className="faq-summary">
+                  <span className="badge badge-total">Total: {socialMediaList.length}</span>
+                  <span className="badge badge-active">Active: {socialMediaList.filter(s => s.is_active).length}</span>
+                </div>
+              </div>
+
+              {/* Create Social Media */}
+              <div className="faq-create-form">
+                <h3>Add New Social Media Link</h3>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Platform *</label>
+                    <input
+                      type="text"
+                      value={newSocial.platform}
+                      onChange={(e) => setNewSocial({...newSocial, platform: e.target.value})}
+                      placeholder="facebook, instagram, twitter, etc"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Display Name *</label>
+                    <input
+                      type="text"
+                      value={newSocial.platform_name}
+                      onChange={(e) => setNewSocial({...newSocial, platform_name: e.target.value})}
+                      placeholder="Facebook, Instagram, etc"
+                    />
+                  </div>
+                </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>URL *</label>
+                    <input
+                      type="url"
+                      value={newSocial.url}
+                      onChange={(e) => setNewSocial({...newSocial, url: e.target.value})}
+                      placeholder="https://facebook.com/yourpage"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Icon Class</label>
+                    <input
+                      type="text"
+                      value={newSocial.icon}
+                      onChange={(e) => setNewSocial({...newSocial, icon: e.target.value})}
+                      placeholder="fab fa-facebook"
+                    />
+                  </div>
+                </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Display Order</label>
+                    <input
+                      type="number"
+                      value={newSocial.display_order}
+                      onChange={(e) => setNewSocial({...newSocial, display_order: parseInt(e.target.value)})}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Status</label>
+                    <select
+                      value={newSocial.is_active}
+                      onChange={(e) => setNewSocial({...newSocial, is_active: parseInt(e.target.value)})}
+                    >
+                      <option value={1}>Active</option>
+                      <option value={0}>Inactive</option>
+                    </select>
+                  </div>
+                </div>
+                <button onClick={handleCreateSocial} className="btn-primary">
+                  Add Social Media Link
+                </button>
+              </div>
+
+              {/* Social Media List */}
+              {socialMediaList.length === 0 ? (
+                <p className="empty-state">No social media links yet</p>
+              ) : (
+                <div className="faq-table-wrapper">
+                  <table className="faq-table">
+                    <thead>
+                      <tr>
+                        <th>Platform</th>
+                        <th>Display Name</th>
+                        <th>URL</th>
+                        <th>Icon</th>
+                        <th>Order</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {socialMediaList.map(social => (
+                        <tr key={social.id} className={editingSocial?.id === social.id ? 'editing-row' : ''}>
+                          <td>
+                            {editingSocial?.id === social.id ? (
+                              <input
+                                type="text"
+                                value={editingSocial.platform}
+                                onChange={(e) => setEditingSocial({...editingSocial, platform: e.target.value})}
+                              />
+                            ) : (
+                              <span className="category-badge">{social.platform}</span>
+                            )}
+                          </td>
+                          <td>
+                            {editingSocial?.id === social.id ? (
+                              <input
+                                type="text"
+                                value={editingSocial.platform_name}
+                                onChange={(e) => setEditingSocial({...editingSocial, platform_name: e.target.value})}
+                              />
+                            ) : (
+                              social.platform_name
+                            )}
+                          </td>
+                          <td>
+                            {editingSocial?.id === social.id ? (
+                              <input
+                                type="url"
+                                value={editingSocial.url}
+                                onChange={(e) => setEditingSocial({...editingSocial, url: e.target.value})}
+                              />
+                            ) : (
+                              <a href={social.url} target="_blank" rel="noopener noreferrer" style={{color: '#ffffff', textDecoration: 'underline'}}>
+                                {social.url}
+                              </a>
+                            )}
+                          </td>
+                          <td>
+                            {editingSocial?.id === social.id ? (
+                              <input
+                                type="text"
+                                value={editingSocial.icon}
+                                onChange={(e) => setEditingSocial({...editingSocial, icon: e.target.value})}
+                              />
+                            ) : (
+                              social.icon || '-'
+                            )}
+                          </td>
+                          <td>{social.display_order}</td>
+                          <td>
+                            {editingSocial?.id === social.id ? (
+                              <select
+                                value={editingSocial.is_active}
+                                onChange={(e) => setEditingSocial({...editingSocial, is_active: parseInt(e.target.value)})}
+                              >
+                                <option value={1}>Active</option>
+                                <option value={0}>Inactive</option>
+                              </select>
+                            ) : (
+                              <span className={`status-badge ${social.is_active ? 'active' : 'inactive'}`}>
+                                {social.is_active ? 'Active' : 'Inactive'}
+                              </span>
+                            )}
+                          </td>
+                          <td>
+                            {editingSocial?.id === social.id ? (
+                              <div className="action-buttons">
+                                <button
+                                  className="btn-save"
+                                  onClick={() => handleUpdateSocial(social.id, editingSocial)}
+                                >
+                                  Save
+                                </button>
+                                <button
+                                  className="btn-cancel"
+                                  onClick={() => setEditingSocial(null)}
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="action-buttons">
+                                <button
+                                  className="btn-edit"
+                                  onClick={() => setEditingSocial({...social})}
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  className="btn-delete"
+                                  onClick={() => handleDeleteSocial(social.id)}
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* ================= HOUSE LAYOUTS SECTION ================= */}
+        {activeSection === 'layouts' && (
+          <>
+            <div className="admin-section">
+              <div className="section-header">
+                <h2>🏠 House Layouts Management</h2>
+                <div className="header-badges">
+                  <span className="badge badge-info">Total: {layoutsList.length}</span>
+                  <span className="badge badge-success">
+                    Public: {layoutsList.filter(l => l.is_public).length}
+                  </span>
+                  <span className="badge badge-secondary">
+                    Private: {layoutsList.filter(l => !l.is_public).length}
+                  </span>
+                </div>
+              </div>
+
+              {/* Filter */}
+              <div className="filter-section" style={{ marginBottom: '1.5rem' }}>
+                <label htmlFor="layouts-filter" style={{ marginRight: '1rem', color: '#fff' }}>Filter:</label>
+                <select 
+                  id="layouts-filter"
+                  value={layoutsFilter} 
+                  onChange={(e) => setLayoutsFilter(e.target.value)}
+                  style={{ 
+                    padding: '0.5rem 1rem', 
+                    background: '#000', 
+                    color: '#fff', 
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    borderRadius: '4px'
+                  }}
+                >
+                  <option value="all">All Layouts</option>
+                  <option value="public">Public Only</option>
+                  <option value="private">Private Only</option>
+                </select>
+              </div>
+
+              {/* Layouts Table */}
+              {layoutsList.length === 0 ? (
+                <p style={{ color: '#999', textAlign: 'center', padding: '3rem' }}>No layouts saved yet.</p>
+              ) : (
+                <div className="table-responsive">
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th>ID</th>
+                        <th>Layout Name</th>
+                        <th>House Type</th>
+                        <th>User</th>
+                        <th>Visibility</th>
+                        <th>Created</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {layoutsList
+                        .filter(layout => {
+                          if (layoutsFilter === 'public') return layout.is_public;
+                          if (layoutsFilter === 'private') return !layout.is_public;
+                          return true;
+                        })
+                        .map((layout) => (
+                        <tr key={layout.id}>
+                          <td>{layout.id}</td>
+                          <td>
+                            <strong style={{ color: '#fff' }}>{layout.layout_name || 'Untitled'}</strong>
+                          </td>
+                          <td>
+                            <span className="badge badge-info">{layout.house_type || 'Custom'}</span>
+                          </td>
+                          <td style={{ color: '#aaa' }}>
+                            {layout.username || `User #${layout.user_id}`}
+                          </td>
+                          <td>
+                            {layout.is_public ? (
+                              <span className="badge badge-success">Public</span>
+                            ) : (
+                              <span className="badge badge-secondary">Private</span>
+                            )}
+                          </td>
+                          <td style={{ color: '#999', fontSize: '0.85rem' }}>
+                            {new Date(layout.created_at).toLocaleDateString('id-ID', {
+                              year: 'numeric',
+                              month: 'short',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </td>
+                          <td>
+                            <div className="action-buttons">
+                              <button
+                                className="btn-toggle"
+                                onClick={() => handleToggleLayoutPublic(layout.id)}
+                                title={layout.is_public ? 'Make Private' : 'Make Public'}
+                              >
+                                {layout.is_public ? '👁️ Hide' : '👁️‍🗨️ Show'}
+                              </button>
+                              <button
+                                className="btn-delete"
+                                onClick={() => handleDeleteLayout(layout.id)}
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* ================= ACTIVITY LOGS SECTION ================= */}
+        {activeSection === 'activity' && (
+          <>
+            <div className="admin-section">
+              <div className="section-header">
+                <h2>📋 Activity Logs</h2>
+                <div className="header-badges">
+                  <span className="badge badge-info">Total Logs: {activityLogs.length}</span>
+                </div>
+              </div>
+
+              {/* Controls */}
+              <div className="filter-section" style={{ marginBottom: '1.5rem', display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                <div>
+                  <label htmlFor="logs-limit" style={{ marginRight: '0.5rem', color: '#fff' }}>Show:</label>
+                  <select 
+                    id="logs-limit"
+                    value={logsLimit} 
+                    onChange={(e) => setLogsLimit(Number(e.target.value))}
+                    style={{ 
+                      padding: '0.5rem 1rem', 
+                      background: '#000', 
+                      color: '#fff', 
+                      border: '1px solid rgba(255,255,255,0.2)',
+                      borderRadius: '4px'
+                    }}
+                  >
+                    <option value={50}>Last 50 logs</option>
+                    <option value={100}>Last 100 logs</option>
+                    <option value={200}>Last 200 logs</option>
+                    <option value={500}>Last 500 logs</option>
+                  </select>
+                </div>
+
+                <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem' }}>
+                  <button 
+                    className="btn-warning"
+                    onClick={() => handleCleanupLogs(30)}
+                    style={{ background: 'rgba(255,193,7,0.1)', color: '#ffc107', border: '1px solid rgba(255,193,7,0.3)' }}
+                  >
+                    🗑️ Delete 30+ days old
+                  </button>
+                  <button 
+                    className="btn-danger"
+                    onClick={() => handleCleanupLogs(90)}
+                    style={{ background: 'rgba(220,53,69,0.1)', color: '#dc3545', border: '1px solid rgba(220,53,69,0.3)' }}
+                  >
+                    🗑️ Delete 90+ days old
+                  </button>
+                </div>
+              </div>
+
+              {/* Activity Logs Table */}
+              {activityLogs.length === 0 ? (
+                <p style={{ color: '#999', textAlign: 'center', padding: '3rem' }}>No activity logs found.</p>
+              ) : (
+                <div className="table-responsive">
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th>ID</th>
+                        <th>User</th>
+                        <th>Action</th>
+                        <th>Entity</th>
+                        <th>Description</th>
+                        <th>IP Address</th>
+                        <th>Timestamp</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {activityLogs.map((log) => (
+                        <tr key={log.id}>
+                          <td style={{ color: '#666' }}>#{log.id}</td>
+                          <td>
+                            <strong style={{ color: '#fff' }}>{log.username || `User #${log.user_id}`}</strong>
+                            {log.email && <div style={{ fontSize: '0.8rem', color: '#888' }}>{log.email}</div>}
+                          </td>
+                          <td>
+                            <span className={`badge ${
+                              log.action.includes('create') ? 'badge-success' :
+                              log.action.includes('update') ? 'badge-info' :
+                              log.action.includes('delete') ? 'badge-danger' :
+                              'badge-secondary'
+                            }`}>
+                              {log.action}
+                            </span>
+                          </td>
+                          <td style={{ color: '#aaa' }}>
+                            {log.entity_type && log.entity_id ? (
+                              <span>{log.entity_type} #{log.entity_id}</span>
+                            ) : (
+                              <span style={{ color: '#666' }}>-</span>
+                            )}
+                          </td>
+                          <td style={{ color: '#ccc', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {log.description || '-'}
+                          </td>
+                          <td style={{ color: '#888', fontFamily: 'monospace', fontSize: '0.85rem' }}>
+                            {log.ip_address || '-'}
+                          </td>
+                          <td style={{ color: '#999', fontSize: '0.85rem' }}>
+                            {new Date(log.created_at).toLocaleDateString('id-ID', {
+                              year: 'numeric',
+                              month: 'short',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              second: '2-digit'
+                            })}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </>
         )}
 
         {/* ================= THEME SECTION ================= */}
